@@ -32,7 +32,7 @@
     "@ai-sdk/anthropic": "^3.0.63",
     "@ai-sdk/groq": "^3.0.31",
     "@ai-sdk/openai": "^3.0.47",
-    "@trigger.dev/sdk": "^3.3.17",
+    "@trigger.dev/sdk": "4.4.3",
     "ai": "^6.0.134",
     "dotenv": "^16.0.0",
     "drizzle-orm": "^0.40.0",

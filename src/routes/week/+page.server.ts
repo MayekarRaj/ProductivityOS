@@ -8,8 +8,8 @@ import { days, tasks, events, sundayReviews } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekDatesIST, getMondayOfWeekIST } from '$lib/utils/dates';
 import { generateSundayReviewDraft } from '$lib/server/ai';
-import { AREAS_MAP } from '$lib/constants/areas';
-import type { AreaKey } from '$lib/constants/areas';
+import { areaFor } from '$lib/constants/areas';
+import { areas } from '$lib/db/schema';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Inferred from the query results — Drizzle gives us fully-typed rows.
@@ -158,6 +158,7 @@ export const actions: Actions = {
 		const dayNotes = weekDayRows.map((d) => d.note).filter(Boolean);
 
 		// Top 2 areas by task count
+		const userAreas = await db.select().from(areas).where(eq(areas.userId, DEFAULT_USER_ID));
 		const areaCounts: Record<string, number> = {};
 		for (const t of weekTasks) {
 			const key = t.area ?? 'personal';
@@ -166,7 +167,7 @@ export const actions: Actions = {
 		const topAreas = Object.entries(areaCounts)
 			.sort((a, b) => b[1] - a[1])
 			.slice(0, 2)
-			.map(([key]) => AREAS_MAP[key as AreaKey]?.label ?? key);
+			.map(([key]) => areaFor(key, userAreas)?.label ?? key);
 
 		const pomodorosTotal = weekDayRows.reduce((s, d) => s + d.pomodoroSessions, 0);
 

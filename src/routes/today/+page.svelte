@@ -12,10 +12,9 @@
 	// type of our load() function in +page.server.ts. Fully type-safe.
 	import type { PageData } from './$types';
 
-	import { AREAS, AREAS_MAP } from '$lib/constants/areas';
+	import { areaFor, colorClasses } from '$lib/constants/areas';
 	import { MVD_HINTS, ENERGY_LEVELS } from '$lib/constants/defaults';
 	import { formatDateLong, formatTimeIST, getGreetingIST } from '$lib/utils/dates';
-	import type { AreaKey } from '$lib/constants/areas';
 	import PomodoroTimer from '$lib/components/PomodoroTimer.svelte';
 
 	// ── Health tips (9.3) — static rotation based on day of month ────────────
@@ -56,8 +55,9 @@
 	// ── Derived values ────────────────────────────────────────────────────────
 	// $derived() is Svelte 5's computed value (replaces $: reactive declarations).
 	// Re-evaluates automatically when its dependencies change.
-	const homeArea = $derived(AREAS_MAP[data.day.homeBase as AreaKey]);
-	const mvdHint = $derived(MVD_HINTS[data.day.homeBase as AreaKey] ?? 'Do one meaningful thing');
+	const homeArea = $derived(areaFor(data.day.homeBase, data.areas));
+	const homeAreaColors = $derived(homeArea ? colorClasses(homeArea.color) : null);
+	const mvdHint = $derived(MVD_HINTS[data.day.homeBase] ?? 'Do one meaningful thing');
 	const greeting = $derived(getGreetingIST());
 	const dateLabel = $derived(formatDateLong(data.day.date));
 
@@ -86,10 +86,9 @@
 			<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">{dateLabel}</h1>
 		</div>
 		<!-- Today's home base area badge -->
-		{#if homeArea}
+		{#if homeArea && homeAreaColors}
 			<span
-				class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-xs {homeArea.color
-					.bg} {homeArea.color.text}"
+				class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-xs {homeAreaColors.bg} {homeAreaColors.text}"
 			>
 				{homeArea.emoji}
 				{homeArea.label}
@@ -284,7 +283,8 @@
 		{/if}
 
 		{#each data.events as event}
-			{@const area = event.area ? AREAS_MAP[event.area as AreaKey] : null}
+			{@const evArea = event.area ? areaFor(event.area, data.areas) : null}
+			{@const evColors = evArea ? colorClasses(evArea.color) : null}
 			<div
 				class="flex items-center gap-3 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2.5"
 			>
@@ -294,11 +294,11 @@
 					{formatTimeIST(event.startsAt)}{event.endsAt ? " → " + formatTimeIST(event.endsAt) : ""}
 				</span>
 				<span class="flex-1 font-mono text-sm text-[#e2e2e8]">{event.title}</span>
-				{#if area}
+				{#if evArea && evColors}
 					<span
-						class="rounded px-1.5 py-0.5 font-mono text-xs {area.color.bg} {area.color.text}"
+						class="rounded px-1.5 py-0.5 font-mono text-xs {evColors.bg} {evColors.text}"
 					>
-						{area.emoji}
+						{evArea.emoji}
 					</span>
 				{/if}
 				<form method="POST" action="?/deleteEvent" use:enhance>
@@ -367,7 +367,7 @@
 						class="rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1 font-mono text-xs text-[#e2e2e8] outline-none"
 					>
 						<option value="">No area</option>
-						{#each AREAS as area}
+						{#each data.areas.filter(a => !a.suspended) as area}
 							<option value={area.key}>{area.emoji} {area.label}</option>
 						{/each}
 					</select>
@@ -403,7 +403,8 @@
 
 		<!-- Pending tasks -->
 		{#each pendingTasks as task}
-			{@const area = task.area ? AREAS_MAP[task.area as AreaKey] : null}
+			{@const taskArea = task.area ? areaFor(task.area, data.areas) : null}
+			{@const taskColors = taskArea ? colorClasses(taskArea.color) : null}
 			<div
 				class="flex items-center gap-3 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2.5"
 			>
@@ -417,11 +418,11 @@
 					></button>
 				</form>
 				<span class="flex-1 font-mono text-sm text-[#e2e2e8]">{task.text}</span>
-				{#if area}
+				{#if taskArea && taskColors}
 					<span
-						class="rounded px-1.5 py-0.5 font-mono text-xs {area.color.bg} {area.color.text}"
+						class="rounded px-1.5 py-0.5 font-mono text-xs {taskColors.bg} {taskColors.text}"
 					>
-						{area.emoji}
+						{taskArea.emoji}
 					</span>
 				{/if}
 				<form method="POST" action="?/deleteTask" use:enhance>
@@ -463,7 +464,7 @@
 				class="rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1 font-mono text-xs text-[#e2e2e8] outline-none"
 			>
 				<option value="">No area</option>
-				{#each AREAS as area}
+				{#each data.areas.filter(a => !a.suspended) as area}
 					<option value={area.key}>{area.emoji} {area.label}</option>
 				{/each}
 			</select>
@@ -482,7 +483,8 @@
 				</summary>
 				<div class="mt-1 space-y-1">
 					{#each doneTasks as task}
-						{@const area = task.area ? AREAS_MAP[task.area as AreaKey] : null}
+						{@const taskArea = task.area ? areaFor(task.area, data.areas) : null}
+						{@const taskColors = taskArea ? colorClasses(taskArea.color) : null}
 						<div
 							class="flex items-center gap-3 rounded-lg border border-[#1e1e2e]/50 bg-[#161620]/50 px-3 py-2"
 						>
@@ -508,11 +510,11 @@
 							<span class="flex-1 font-mono text-sm text-[#6b6b7a] line-through"
 								>{task.text}</span
 							>
-							{#if area}
+							{#if taskArea && taskColors}
 								<span
-									class="rounded px-1.5 py-0.5 font-mono text-xs opacity-50 {area.color.bg} {area.color.text}"
+									class="rounded px-1.5 py-0.5 font-mono text-xs opacity-50 {taskColors.bg} {taskColors.text}"
 								>
-									{area.emoji}
+									{taskArea.emoji}
 								</span>
 							{/if}
 							<form method="POST" action="?/deleteTask" use:enhance>

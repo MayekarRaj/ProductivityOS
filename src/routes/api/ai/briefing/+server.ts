@@ -9,8 +9,8 @@ import { db } from '$lib/db';
 import { days, tasks, events } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, formatTimeIST } from '$lib/utils/dates';
-import { AREAS_MAP } from '$lib/constants/areas';
-import type { AreaKey } from '$lib/constants/areas';
+import { areaFor } from '$lib/constants/areas';
+import { areas } from '$lib/db/schema';
 import { generateDailyBriefing } from '$lib/server/ai';
 
 export const GET: RequestHandler = async () => {
@@ -28,12 +28,13 @@ export const GET: RequestHandler = async () => {
 		});
 	}
 
-	const [pendingTasks, todayEvents] = await Promise.all([
+	const [pendingTasks, todayEvents, userAreas] = await Promise.all([
 		db.select().from(tasks).where(and(eq(tasks.dayId, day.id), eq(tasks.done, false))),
-		db.select().from(events).where(eq(events.dayId, day.id)).orderBy(events.startsAt)
+		db.select().from(events).where(eq(events.dayId, day.id)).orderBy(events.startsAt),
+		db.select().from(areas).where(eq(areas.userId, DEFAULT_USER_ID))
 	]);
 
-	const homeArea = AREAS_MAP[day.homeBase as AreaKey];
+	const homeArea = areaFor(day.homeBase, userAreas);
 
 	const result = await generateDailyBriefing({
 		homeBase: day.homeBase,

@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { PageData } from './$types';
-	import { AREAS, AREAS_MAP } from '$lib/constants/areas';
+	import { areaFor as areaForHelper, colorClasses } from '$lib/constants/areas';
 	import { DAY_NAMES } from '$lib/constants/defaults';
 	import { isDueOnDay, heatmapStatus } from '$lib/utils/habits';
-	import type { AreaKey } from '$lib/constants/areas';
 	import type { HeatmapStatus } from '$lib/utils/habits';
 	import { Archive, ArchiveRestore } from 'lucide-svelte';
 
@@ -30,8 +29,7 @@
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	function areaFor(key: string | null | undefined) {
-		if (!key) return undefined;
-		return AREAS_MAP[key as AreaKey];
+		return areaForHelper(key, data.areas);
 	}
 
 	// Returns weekday abbreviation for a date string
@@ -140,7 +138,7 @@
 							class="w-full rounded-lg border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
 								font-mono text-xs text-[#e2e2e8] focus:outline-none focus:ring-1 focus:ring-white/20"
 						>
-							{#each AREAS as a}
+							{#each data.areas.filter(a => !a.suspended) as a}
 								<option value={a.key}>{a.emoji} {a.label}</option>
 							{/each}
 						</select>
@@ -251,7 +249,7 @@
 							{#if area}
 								<span
 									class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]
-										{area.color.bg} {area.color.text}"
+										{colorClasses(area.color).bg} {colorClasses(area.color).text}"
 								>
 									{area.emoji}
 								</span>
@@ -330,7 +328,7 @@
 							{#if area}
 								<span
 									class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5
-										font-mono text-[10px] {area.color.bg} {area.color.text}"
+										font-mono text-[10px] {colorClasses(area.color).bg} {colorClasses(area.color).text}"
 								>
 									{area.emoji}
 									{area.label}
@@ -420,7 +418,7 @@
 						{#if area}
 							<span
 								class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5
-									font-mono text-[10px] {area.color.bg} {area.color.text}"
+									font-mono text-[10px] {colorClasses(area.color).bg} {colorClasses(area.color).text}"
 							>
 								{area.emoji}
 							</span>

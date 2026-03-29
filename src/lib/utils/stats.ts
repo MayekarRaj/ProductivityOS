@@ -1,7 +1,7 @@
 // Weekly stats computation.
 // All functions take raw DB rows and return structured data ready for the UI.
 
-import { AREAS, type AreaKey } from '$lib/constants/areas';
+import type { AreaRow } from '$lib/constants/areas';
 import { ENERGY_LEVELS } from '$lib/constants/defaults';
 import { isDueOnDay } from '$lib/utils/habits';
 
@@ -22,8 +22,6 @@ export type AreaStat = {
 	key: string;
 	label: string;
 	emoji: string;
-	colorText: string;
-	colorBg: string;
 	tasksDone: number;
 	tasksTotal: number;
 };
@@ -69,7 +67,8 @@ export function computeWeekStats(
 	}>,
 	taskRows: Array<{ dayId: string; area: string | null; done: boolean }>,
 	habitRows: Array<{ id: string; name: string; area: string; frequency: string; customDays: string[] | null }>,
-	habitLogRows: Array<{ habitId: string; date: string; status: string }>
+	habitLogRows: Array<{ habitId: string; date: string; status: string }>,
+	areas: AreaRow[]
 ): WeekStats {
 	// ── Build lookup helpers ──────────────────────────────────────────────────
 	const dayByDate = new Map(dayRows.map((d) => [d.date, d]));
@@ -113,15 +112,12 @@ export function computeWeekStats(
 		return day && weekDates.includes(day.date);
 	});
 
-	const areaStats: AreaStat[] = AREAS.map((area) => {
-		const areaKey = area.key as AreaKey;
-		const areaTasksAll = allWeekTasks.filter((t) => (t.area ?? 'personal') === areaKey);
+	const areaStats: AreaStat[] = areas.map((area) => {
+		const areaTasksAll = allWeekTasks.filter((t) => (t.area ?? 'personal') === area.key);
 		return {
-			key: areaKey,
+			key: area.key,
 			label: area.label,
 			emoji: area.emoji,
-			colorText: area.color.text,
-			colorBg: area.color.bg,
 			tasksDone: areaTasksAll.filter((t) => t.done).length,
 			tasksTotal: areaTasksAll.length
 		};

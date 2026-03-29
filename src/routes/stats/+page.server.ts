@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { eq, and, inArray, gte } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { days, tasks, habits, habitLogs } from '$lib/db/schema';
+import { days, tasks, habits, habitLogs, areas } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekDatesIST, getMondayOfWeekIST } from '$lib/utils/dates';
 import { computeWeekStats } from '$lib/utils/stats';
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async () => {
 
 	const dayIds = weekDayRows.map((d) => d.id);
 
-	const [weekTasks, activeHabits, weekHabitLogs] = await Promise.all([
+	const [weekTasks, activeHabits, weekHabitLogs, userAreas] = await Promise.all([
 		dayIds.length > 0
 			? db.select().from(tasks).where(inArray(tasks.dayId, dayIds))
 			: Promise.resolve([]),
@@ -32,10 +32,16 @@ export const load: PageServerLoad = async () => {
 		db
 			.select()
 			.from(habitLogs)
-			.where(gte(habitLogs.date, weekStartDate))
+			.where(gte(habitLogs.date, weekStartDate)),
+
+		db
+			.select()
+			.from(areas)
+			.where(eq(areas.userId, DEFAULT_USER_ID))
+			.orderBy(areas.sortOrder, areas.createdAt)
 	]);
 
-	const stats = computeWeekStats(weekDates, weekDayRows, weekTasks, activeHabits, weekHabitLogs);
+	const stats = computeWeekStats(weekDates, weekDayRows, weekTasks, activeHabits, weekHabitLogs, userAreas);
 
 	return { todayStr, weekDates, weekStartDate, stats };
 };

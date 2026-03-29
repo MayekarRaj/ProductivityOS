@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { AREAS_MAP } from '$lib/constants/areas';
-	import type { AreaKey } from '$lib/constants/areas';
+	import { areaFor as areaForHelper, colorClasses } from '$lib/constants/areas';
 
 	let { data }: { data: PageData } = $props();
 
@@ -38,7 +37,7 @@
 	);
 
 	function areaFor(key: string) {
-		return AREAS_MAP[key as AreaKey];
+		return areaForHelper(key, data.areas);
 	}
 </script>
 
@@ -180,7 +179,7 @@
 
 					<li class="space-y-1">
 						<div class="flex items-center justify-between">
-							<span class="font-mono text-xs {a?.color.text ?? 'text-[#e2e2e8]'}">
+							<span class="font-mono text-xs {colorClasses(a?.color ?? 'purple').text}">
 								{area.emoji} {area.label}
 							</span>
 							<span class="font-mono text-xs text-[#6b6b7a]">
@@ -191,22 +190,12 @@
 						<div class="relative h-2 w-full rounded-full bg-[#1e1e2e]">
 							<!-- Total bar (faint background) -->
 							<div
-								class="absolute left-0 top-0 h-full rounded-full {a?.color.bg ?? 'bg-white/10'}"
+								class="absolute left-0 top-0 h-full rounded-full {colorClasses(a?.color ?? 'purple').bg}"
 								style="width: {barWidth}%"
 							></div>
 							<!-- Done bar (solid fill using border color as bg) -->
 							<div
-								class="absolute left-0 top-0 h-full rounded-full {area.key === 'job'
-									? 'bg-blue-400'
-									: area.key === 'getfly'
-										? 'bg-purple-400'
-										: area.key === 'mirai'
-											? 'bg-green-400'
-											: area.key === 'vamoss'
-												? 'bg-orange-400'
-												: area.key === 'fitness'
-													? 'bg-rose-400'
-													: 'bg-amber-400'}"
+								class="absolute left-0 top-0 h-full rounded-full {colorClasses(a?.color ?? 'purple').solid}"
 								style="width: {doneWidth}%"
 							></div>
 						</div>
@@ -236,7 +225,7 @@
 						<div class="flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								{#if a}
-									<span class="font-mono text-[10px] {a.color.text}">{a.emoji}</span>
+									<span class="font-mono text-[10px] {colorClasses(a.color).text}">{a.emoji}</span>
 								{/if}
 								<span class="font-mono text-xs text-[#e2e2e8]">{habit.name}</span>
 							</div>

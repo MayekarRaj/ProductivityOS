@@ -1,9 +1,7 @@
-import type { AreaKey } from './areas';
-
 // ─── Default weekly schedule ─────────────────────────────────────────────────
 // Applied when creating a new day row for the first time.
 // User can override per-day via the Week view.
-export const DEFAULT_SCHEDULE: Record<string, AreaKey> = {
+export const DEFAULT_SCHEDULE: Record<string, string> = {
 	Mon: 'getfly',
 	Tue: 'mirai',
 	Wed: 'getfly',
@@ -16,7 +14,7 @@ export const DEFAULT_SCHEDULE: Record<string, AreaKey> = {
 // ─── MVD hints ───────────────────────────────────────────────────────────────
 // "Minimum Viable Day" — the bare minimum to count the day as a win.
 // Shown as a callout on the Today view, linked to the day's home base area.
-export const MVD_HINTS: Record<AreaKey, string> = {
+export const MVD_HINTS: Record<string, string> = {
 	job: 'Ship one thing',
 	getfly: '20 min of thinking / planning',
 	mirai: 'Review one task or push one commit',
@@ -31,7 +29,7 @@ export type Frequency = 'daily' | 'weekdays' | '3x' | 'custom';
 
 export const STARTER_HABITS: Array<{
 	name: string;
-	area: AreaKey;
+	area: string;
 	frequency: Frequency;
 }> = [
 	{ name: 'Workout', area: 'fitness', frequency: 'daily' },

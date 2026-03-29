@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { PageData } from './$types';
-	import { AREAS, AREAS_MAP } from '$lib/constants/areas';
+	import { areaFor as areaForHelper, colorClasses } from '$lib/constants/areas';
 	import { formatTimeIST } from '$lib/utils/dates';
-	import type { AreaKey } from '$lib/constants/areas';
 
 	let { data }: { data: PageData } = $props();
 
@@ -26,10 +25,9 @@
 		expandedDate = expandedDate === date ? null : date;
 	}
 
-	// Derive the area object for a homeBase key
+	// Derive the area object for a homeBase key — looks up in data.areas from layout
 	function areaFor(key: string | null | undefined) {
-		if (!key) return undefined;
-		return AREAS_MAP[key as AreaKey];
+		return areaForHelper(key, data.areas);
 	}
 
 	// Format YYYY-MM-DD as short "Mar 23"
@@ -71,6 +69,7 @@
 				{@const entry = data.dayMap[date]}
 				{@const isToday = date === data.todayStr}
 				{@const area = areaFor(entry.day?.homeBase)}
+				{@const areaColors = area ? colorClasses(area.color) : null}
 				{@const pendingCount = entry.tasks.filter((t) => !t.done).length}
 				{@const doneCount = entry.tasks.filter((t) => t.done).length}
 				{@const isExpanded = expandedDate === date}
@@ -104,7 +103,7 @@
 					{#if area}
 						<span
 							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]
-								{area.color.bg} {area.color.text}"
+								{areaColors?.bg} {areaColors?.text}"
 						>
 							{area.emoji}
 							{area.label}
@@ -175,7 +174,7 @@
 							font-mono text-xs text-[#e2e2e8] focus:outline-none focus:ring-1 focus:ring-white/20"
 						value={entry.day?.homeBase ?? 'getfly'}
 					>
-						{#each AREAS as a}
+						{#each data.areas.filter(a => !a.suspended) as a}
 							<option value={a.key}>{a.emoji} {a.label}</option>
 						{/each}
 					</select>
@@ -201,7 +200,7 @@
 									{#if task.area}
 										{@const ta = areaFor(task.area)}
 										{#if ta}
-											<span class="shrink-0 font-mono text-[10px] {ta.color.text}"
+											<span class="shrink-0 font-mono text-[10px] {colorClasses(ta.color).text}"
 												>{ta.emoji}</span
 											>
 										{/if}
@@ -240,7 +239,7 @@
 									{#if event.area}
 										{@const ea = areaFor(event.area)}
 										{#if ea}
-											<span class="shrink-0 font-mono text-[10px] {ea.color.text}"
+											<span class="shrink-0 font-mono text-[10px] {colorClasses(ea.color).text}"
 												>{ea.emoji}</span
 											>
 										{/if}

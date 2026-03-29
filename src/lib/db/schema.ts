@@ -26,6 +26,31 @@ const timestamptz = (name: string) => timestamp(name, { withTimezone: true });
 import { relations } from 'drizzle-orm';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AREAS
+// Dynamic life/work areas — previously hardcoded, now stored in DB so users
+// can add, edit, suspend, or delete them over time.
+// key = short slug (e.g. 'getfly') — referenced as a plain string in all other tables.
+// color = key into COLOR_OPTIONS in areas.ts (e.g. 'purple').
+// ─────────────────────────────────────────────────────────────────────────────
+export const areas = pgTable(
+	'areas',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		key: text('key').notNull(), // slug, unique per user
+		label: text('label').notNull(),
+		emoji: text('emoji').notNull().default('📌'),
+		color: text('color').notNull().default('purple'), // e.g. 'purple', 'blue'
+		suspended: boolean('suspended').notNull().default(false),
+		sortOrder: integer('sort_order').notNull().default(0),
+		createdAt: timestamptz('created_at').notNull().defaultNow()
+	},
+	(table) => [unique('areas_user_key_unique').on(table.userId, table.key)]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // USERS
 // Single user for now (v1), but every table has user_id for future multi-user.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,6 +261,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 	habits: many(habits),
 	inboxItems: many(inboxItems),
 	sundayReviews: many(sundayReviews),
+	areas: many(areas),
 	telegramConversation: one(telegramConversations, {
 		fields: [users.id],
 		references: [telegramConversations.userId]

@@ -4,7 +4,7 @@
 	import { onNavigate } from '$app/navigation';
 
 	// lucide-svelte — same icons as lucide-react but for Svelte
-	import { Sun, CalendarDays, Dumbbell, BarChart2 } from 'lucide-svelte';
+	import { Sun, CalendarDays, Dumbbell, BarChart2, Settings } from 'lucide-svelte';
 
 	// Svelte 5: layout receives children as a snippet (replaces <slot />)
 	let { children } = $props();
@@ -14,7 +14,8 @@
 		{ href: '/today', label: 'Today', icon: Sun },
 		{ href: '/week', label: 'Week', icon: CalendarDays },
 		{ href: '/habits', label: 'Habits', icon: Dumbbell },
-		{ href: '/stats', label: 'Stats', icon: BarChart2 }
+		{ href: '/stats', label: 'Stats', icon: BarChart2 },
+		{ href: '/settings', label: 'Settings', icon: Settings }
 	] as const;
 
 	// 10.5: View Transitions API — cross-fade between tab pages.
