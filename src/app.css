@@ -1,0 +1,77 @@
+/* Tailwind layers — order matters:
+   base → resets + default element styles
+   components → reusable class groups
+   utilities → the atomic classes (p-4, text-sm, etc.) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens as CSS custom properties ───────────────────────────────
+   Using CSS variables means we can reference them in arbitrary CSS when
+   Tailwind's utility classes aren't enough. Tailwind arbitrary values like
+   bg-[#0c0c0f] are the primary way to use these. */
+:root {
+	--bg-base: #0c0c0f;
+	--bg-card: #161620;
+	--border: #1e1e2e;
+	--text-primary: #e2e2e8;
+	--text-muted: #6b6b7a;
+}
+
+/* ─── Base styles ──────────────────────────────────────────────────────────── */
+body {
+	background-color: var(--bg-base);
+	color: var(--text-primary);
+	font-family: 'DM Mono', 'Courier New', monospace;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* ─── Custom scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+	width: 6px;
+}
+::-webkit-scrollbar-track {
+	background: var(--bg-card);
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-muted);
+}
+
+/* ─── Focus ring — matches the area color ──────────────────────────────────── */
+/* Individual area focus rings are applied with Tailwind classes inline */
+*:focus-visible {
+	outline: 2px solid #a855f7; /* purple — Getfly default */
+	outline-offset: 2px;
+}
+
+/* ─── Navigation loading bar animation ─────────────────────────────────────── */
+/* Used in the layout for the top progress bar during page transitions */
+@keyframes loading {
+	0%   { width: 0%; opacity: 1; }
+	70%  { width: 85%; opacity: 1; }
+	100% { width: 100%; opacity: 0; }
+}
+
+/* ─── View transitions — cross-fade between pages ──────────────────────────── */
+/* Works with the onNavigate() call in +layout.svelte                          */
+/* ::view-transition-old/new are the browser's built-in transition pseudo-elements */
+::view-transition-old(root) {
+	animation: 150ms ease-out both fade-out;
+}
+::view-transition-new(root) {
+	animation: 200ms ease-in both fade-in;
+}
+
+@keyframes fade-out {
+	from { opacity: 1; }
+	to   { opacity: 0; }
+}
+
+@keyframes fade-in {
+	from { opacity: 0; }
+	to   { opacity: 1; }
+}

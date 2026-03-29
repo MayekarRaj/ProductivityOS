@@ -1,0 +1,116 @@
+{
+  "skills": {
+    "sveltekit-dev-guidelines": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "svelte", "sveltekit", "+page", "+layout", "+server",
+          "form action", "load function", "page.server", "server.ts",
+          "component", "route", "svelte store", "$state", "$derived"
+        ],
+        "intentPatterns": [
+          "(create|add|build|write).*?(page|route|component|layout)",
+          "(implement|fix|update).*?(svelte|sveltekit)",
+          "new.*?(page|route|component)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "src/routes/**/*.svelte",
+          "src/routes/**/*.ts",
+          "src/lib/**/*.svelte",
+          "src/lib/**/*.ts",
+          "src/**/*.svelte"
+        ]
+      }
+    },
+    "drizzle-patterns": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "drizzle", "migration", "schema", "database", "query",
+          "insert", "select", "db.", "sql", "table", "orm",
+          "drizzle-kit", "supabase", "postgres"
+        ],
+        "intentPatterns": [
+          "(create|add|update|delete).*?(table|schema|migration|column)",
+          "(query|fetch|insert|update).*?(from|into|database|db)",
+          "database.*?(change|update|add)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "src/lib/db/**/*.ts",
+          "drizzle/**/*",
+          "drizzle.config.ts"
+        ]
+      }
+    },
+    "telegram-bot": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "telegram", "webhook", "bot", "message", "chat_id",
+          "sendMessage", "bot token", "botfather", "conversation state",
+          "intent", "parse message"
+        ],
+        "intentPatterns": [
+          "(implement|build|add).*?(telegram|bot|webhook|notification)",
+          "(send|receive|parse).*?(message|notification)",
+          "telegram.*?(command|handler|flow)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "src/routes/api/telegram/**",
+          "src/lib/server/telegram.ts",
+          "src/lib/server/notifications.ts"
+        ]
+      }
+    },
+    "ai-integration": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "claude", "ai sdk", "vercel ai", "anthropic", "prompt",
+          "system prompt", "ai briefing", "natural language", "parse",
+          "streaming", "tool use", "ai feature"
+        ],
+        "intentPatterns": [
+          "(build|implement|add).*?(ai|claude|llm|briefing)",
+          "(generate|create).*?(prompt|briefing|summary)",
+          "ai.*?(parse|classify|extract)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "src/lib/server/ai.ts",
+          "src/routes/api/ai/**"
+        ]
+      }
+    },
+    "skill-developer": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "create skill", "new skill", "add skill", "skill trigger",
+          "skill-rules", "hook", "agent", "slash command"
+        ],
+        "intentPatterns": [
+          "(create|add|update).*?(skill|hook|agent|command)",
+          "skill.*?(activate|trigger|rule)"
+        ]
+      }
+    }
+  }
+}

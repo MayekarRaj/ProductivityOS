@@ -1,0 +1,43 @@
+{
+  "name": "planner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-vercel": "^5.0.0",
+    "@sveltejs/kit": "^2.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "autoprefixer": "^10.4.0",
+    "drizzle-kit": "^0.30.0",
+    "postcss": "^8.4.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^1.2.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/groq": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.47",
+    "@trigger.dev/sdk": "^3.3.17",
+    "ai": "^6.0.134",
+    "dotenv": "^16.0.0",
+    "drizzle-orm": "^0.40.0",
+    "lucide-svelte": "^0.468.0",
+    "postgres": "^3.4.0",
+    "zod": "^4.3.6"
+  }
+}

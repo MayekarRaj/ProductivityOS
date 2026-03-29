@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- PWA meta tags -->
+		<meta name="theme-color" content="#161620" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Planner" />
+		<link rel="apple-touch-icon" href="/icons/icon.svg" />
+
+		<!-- Google Fonts — loaded here so they're available before any JS runs -->
+		<!-- DM Mono: UI chrome, labels, code, monospace elements -->
+		<!-- Space Grotesk: headings, tab labels, display text -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+		<link
+			href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;600;700&display=swap"
+			rel="stylesheet"
+		/>
+
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<!-- data-sveltekit-preload-data="hover": SvelteKit starts fetching page data
+		     when the user hovers over a link — makes navigation feel instant -->
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
