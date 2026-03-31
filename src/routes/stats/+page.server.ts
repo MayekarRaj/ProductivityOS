@@ -1,7 +1,7 @@
-import type { PageServerLoad } from './$types';
+import type { PageServerLoad, Actions } from './$types';
 import { eq, and, inArray, gte } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { days, tasks, habits, habitLogs, areas } from '$lib/db/schema';
+import { days, tasks, habits, habitLogs, areas, users } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekDatesIST, getMondayOfWeekIST } from '$lib/utils/dates';
 import { computeWeekStats } from '$lib/utils/stats';
@@ -43,5 +43,39 @@ export const load: PageServerLoad = async () => {
 
 	const stats = computeWeekStats(weekDates, weekDayRows, weekTasks, activeHabits, weekHabitLogs, userAreas);
 
-	return { todayStr, weekDates, weekStartDate, stats };
+	// ── Prev-week comparison ──────────────────────────────────────────────────
+	const prevWeekDates = weekDates.map((d) => {
+		const date = new Date(d + 'T00:00:00+05:30');
+		date.setDate(date.getDate() - 7);
+		return date.toISOString().slice(0, 10);
+	});
+
+	const prevWeekDayRows = await db
+		.select()
+		.from(days)
+		.where(and(eq(days.userId, DEFAULT_USER_ID), inArray(days.date, prevWeekDates)));
+
+	const prevDayIds = prevWeekDayRows.map((d) => d.id);
+	const [prevWeekTasks, prevWeekHabitLogs] = await Promise.all([
+		prevDayIds.length > 0
+			? db.select().from(tasks).where(inArray(tasks.dayId, prevDayIds))
+			: Promise.resolve([]),
+		db.select().from(habitLogs).where(gte(habitLogs.date, prevWeekDates[0]))
+	]);
+
+	const prevStats = computeWeekStats(
+		prevWeekDates, prevWeekDayRows, prevWeekTasks,
+		activeHabits, prevWeekHabitLogs, userAreas
+	);
+
+	return { todayStr, weekDates, weekStartDate, stats, prevStats };
+};
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+export const actions: Actions = {
+	updateFocus: async ({ request }) => {
+		const data = await request.formData();
+		const currentFocus = (data.get('currentFocus') as string) ?? '';
+		await db.update(users).set({ currentFocus }).where(eq(users.id, DEFAULT_USER_ID));
+	}
 };

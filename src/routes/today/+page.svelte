@@ -15,19 +15,9 @@
 	import { areaFor, colorClasses } from '$lib/constants/areas';
 	import { MVD_HINTS, ENERGY_LEVELS } from '$lib/constants/defaults';
 	import { formatDateLong, formatTimeIST, getGreetingIST } from '$lib/utils/dates';
+	import PanelCard from '$lib/components/PanelCard.svelte';
 	import PomodoroTimer from '$lib/components/PomodoroTimer.svelte';
-
-	// ── Health tips (9.3) — static rotation based on day of month ────────────
-	const HEALTH_TIPS = [
-		'Drink water before coffee. Your body is 8h dehydrated.',
-		'Take a 5-min walk between focus blocks. Movement resets the mind.',
-		'Stand up and stretch every 90 minutes.',
-		'Sleep 7–8h. Cognitive performance drops 20% on less than 6h.',
-		'Eat protein at breakfast — sustains energy better than carbs alone.',
-		'Screen-off 30 min before bed. Blue light delays melatonin.',
-		'Box breathing: 4s in · 4s hold · 4s out. Resets cortisol.'
-	];
-	const todayTip = HEALTH_TIPS[new Date().getDate() % HEALTH_TIPS.length];
+	import TwoColumnPage from '$lib/components/TwoColumnPage.svelte';
 
 	// Svelte 5: `$props()` replaces `export let data`.
 	// The type annotation ensures `data` matches what our load() function returns.
@@ -51,6 +41,44 @@
 	let nlResult = $state('');
 	let briefing = $state<{ briefing: string; suggestions: string[] } | null>(null);
 	let briefingLoading = $state(false);
+
+	// ── New state for briefing collapse and live clock ─────────────────────────
+	let briefingCollapsed = $state(false);
+	let now = $state(new Date());
+
+	// Live clock — updates every 30 seconds for ACTIVE event detection
+	// $effect runs after mount and cleans up on destroy
+	$effect(() => {
+		const interval = setInterval(() => {
+			now = new Date();
+		}, 30_000);
+		return () => clearInterval(interval);
+	});
+
+	// ── Briefing text renderer — parses [hl]...[/hl] and [area:key]...[/area] markers ──
+	// Returns HTML string safe to use with {@html ...}
+	function renderBriefing(text: string, areas: typeof data.areas): string {
+		// Replace [area:key]...[/area] with area-colored spans
+		let result = text.replace(/\[area:([^\]]+)\](.*?)\[\/area\]/g, (_, key, content) => {
+			const area = areas.find(a => a.key === key);
+			if (!area) return content;
+			// Map color key to a Tailwind inline hex — using a simple lookup
+			const colorMap: Record<string, string> = {
+				blue: '#60a5fa', purple: '#c084fc', green: '#4ade80',
+				orange: '#fb923c', rose: '#fb7185', amber: '#fbbf24',
+				teal: '#2dd4bf', pink: '#f472b6', red: '#f87171', indigo: '#818cf8'
+			};
+			const hex = colorMap[area.color] ?? '#c084fc';
+			return `<span style="color:${hex}">${content}</span>`;
+		});
+
+		// Replace [hl]...[/hl] with accent-colored spans
+		result = result.replace(/\[hl\](.*?)\[\/hl\]/g,
+			'<span class="text-violet-400 font-medium">$1</span>'
+		);
+
+		return result;
+	}
 
 	// ── Derived values ────────────────────────────────────────────────────────
 	// $derived() is Svelte 5's computed value (replaces $: reactive declarations).
@@ -78,7 +106,8 @@
 	}
 </script>
 
-<div class="space-y-6">
+<TwoColumnPage>
+  {#snippet main()}
 	<!-- ── Header ──────────────────────────────────────────────────────────── -->
 	<div class="flex items-start justify-between">
 		<div>
@@ -96,11 +125,7 @@
 		{/if}
 	</div>
 
-	<!-- ── 9.5 Natural Language Input ──────────────────────────────────────── -->
-	<!--
-		Lets the user type anything — "review roadmap for Getfly", "meeting at 3pm tomorrow".
-		Submitted to the nlTask server action which calls AI to parse and create the item.
-	-->
+	<!-- ── Command Bar ──────────────────────────────────────────────────────── -->
 	<form
 		method="POST"
 		action="?/nlTask"
@@ -120,207 +145,191 @@
 	>
 		<input type="hidden" name="dayId" value={data.day.id} />
 		<div
-			class="flex items-center gap-2 rounded-xl border border-[#1e1e2e] bg-[#161620] px-4 py-3
-				focus-within:border-[#2a2a3e]"
+			class="flex items-center gap-3 rounded-lg border border-[#1e1e2e] bg-[#161620] px-4 py-3
+				   focus-within:border-[#2a2a3e]"
 		>
-			<span class="font-mono text-sm text-[#6b6b7a]">✦</span>
+			<!-- ⌘ command symbol prefix -->
+			<span class="shrink-0 font-mono text-sm text-[#3a3a4e]">⌘</span>
 			<input
 				bind:value={nlInput}
 				name="text"
-				placeholder='Add anything... "review roadmap" or "meeting at 3pm"'
+				placeholder="Review roadmap or meeting at 3pm..."
 				class="flex-1 bg-transparent font-mono text-sm text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
 			/>
-			{#if nlInput}
-				<button type="submit" class="font-mono text-xs text-[#6b6b7a] hover:text-[#e2e2e8]">
-					↵
-				</button>
-			{/if}
+			<!-- ENTER button — always visible -->
+			<button
+				type="submit"
+				class="shrink-0 rounded border border-[#2a2a3e] px-2 py-0.5 font-mono text-[10px]
+					   uppercase tracking-widest text-[#6b6b7a] transition-colors hover:border-[#3a3a4e]
+					   hover:text-[#e2e2e8]"
+			>
+				Enter
+			</button>
 		</div>
 		{#if nlResult}
 			<p class="pl-2 font-mono text-xs text-green-400">{nlResult}</p>
 		{/if}
 	</form>
 
-	<!-- ── 9.1/9.2 AI Briefing ──────────────────────────────────────────────── -->
-	<!--
-		Lazy-loaded: only fetched when the user clicks "Generate".
-		Avoids slowing down the initial page load.
-	-->
-	<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
+	<!-- ── Cognitive Briefing ────────────────────────────────────────────────── -->
+	<div class="rounded-lg border border-[#1e1e2e] bg-[#161620] p-4">
 		<div class="flex items-center justify-between">
-			<p class="font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
-				AI Briefing
-			</p>
-			<button
-				onclick={fetchBriefing}
-				disabled={briefingLoading}
-				class="font-mono text-xs text-[#6b6b7a] transition-colors hover:text-[#e2e2e8]
-					disabled:opacity-40"
-			>
-				{briefingLoading ? 'Thinking…' : briefing ? 'Refresh' : 'Generate'}
-			</button>
+			<div class="flex items-center gap-2">
+				<!-- Spark icon -->
+				<svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="text-violet-400">
+					<path d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5L6 1Z" fill="currentColor"/>
+				</svg>
+				<span class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+					Cognitive Briefing
+				</span>
+			</div>
+			<div class="flex items-center gap-3">
+				<button
+					onclick={fetchBriefing}
+					disabled={briefingLoading}
+					class="font-mono text-[10px] text-[#6b6b7a] transition-colors hover:text-[#e2e2e8] disabled:opacity-40"
+				>
+					{briefingLoading ? 'Thinking…' : briefing ? '↺ Refresh' : 'Generate'}
+				</button>
+				<!-- Collapse chevron — toggles briefing visibility -->
+				{#if briefing}
+					<button
+						onclick={() => (briefingCollapsed = !briefingCollapsed)}
+						class="text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
+						aria-label="Toggle briefing"
+					>
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+							<path
+								d={briefingCollapsed ? 'M3 4.5L6 7.5L9 4.5' : 'M3 7.5L6 4.5L9 7.5'}
+								stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
+				{/if}
+			</div>
 		</div>
 
-		{#if briefing}
-			<p class="mt-3 font-mono text-sm leading-relaxed text-[#e2e2e8]">{briefing.briefing}</p>
-			{#if briefing.suggestions.length > 0}
-				<ul class="mt-3 space-y-1">
-					{#each briefing.suggestions as s}
-						<li class="flex items-start gap-2 font-mono text-xs text-[#6b6b7a]">
-							<span class="text-[#3a3a4e]">→</span>{s}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		{:else if !briefingLoading}
+		{#if briefing && !briefingCollapsed}
+			<!-- Briefing text with inline highlights parsed from [hl] and [area:key] markers -->
+			<p class="mt-3 font-mono text-sm leading-relaxed text-[#c8c8d4]">
+				{@html renderBriefing(briefing.briefing, data.areas)}
+			</p>
+
+			<!-- Action buttons -->
+			<div class="mt-4 flex flex-wrap gap-2">
+				<button
+					type="button"
+					class="flex items-center gap-1.5 rounded border border-[#2a2a3e] px-3 py-1.5
+						   font-mono text-[10px] uppercase tracking-widest text-[#6b6b7a]
+						   transition-colors hover:border-[#3a3a4e] hover:text-[#e2e2e8]"
+				>
+					<!-- Calendar icon -->
+					<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+						<rect x="1" y="2" width="8" height="7" rx="1" stroke="currentColor" stroke-width="1.2"/>
+						<path d="M1 4.5H9" stroke="currentColor" stroke-width="1.2"/>
+						<path d="M3 1V3M7 1V3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+					</svg>
+					Reschedule Low Priority
+				</button>
+				<button
+					type="button"
+					onclick={() => {
+						// Scroll to pomodoro timer in the panel
+						document.getElementById('pomodoro-panel')?.scrollIntoView({ behavior: 'smooth' });
+					}}
+					class="flex items-center gap-1.5 rounded border border-[#2a2a3e] px-3 py-1.5
+						   font-mono text-[10px] uppercase tracking-widest text-[#6b6b7a]
+						   transition-colors hover:border-violet-500/50 hover:text-violet-400"
+				>
+					<!-- Timer icon -->
+					<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+						<circle cx="5" cy="5.5" r="3.5" stroke="currentColor" stroke-width="1.2"/>
+						<path d="M5 3.5V5.5L6.5 6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+						<path d="M3.5 1H6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+					</svg>
+					Start Focus Session
+				</button>
+			</div>
+		{:else if !briefingLoading && !briefing}
 			<p class="mt-2 font-mono text-xs text-[#3a3a4e]">
-				Click Generate for a personalised briefing based on your tasks and energy.
+				Generate a personalised briefing based on your tasks and energy.
 			</p>
 		{/if}
 	</div>
 
-	<!-- ── 9.3 Health Tip ───────────────────────────────────────────────────── -->
-	<!-- Rotates daily based on day-of-month. Simple, no AI needed. -->
-	<div class="flex items-start gap-3 rounded-xl border border-[#1e1e2e] bg-[#161620] px-4 py-3">
-		<span class="mt-0.5 text-sm">💡</span>
-		<p class="font-mono text-xs leading-relaxed text-[#6b6b7a]">{todayTip}</p>
-	</div>
-
-	<!-- ── Energy ────────────────────────────────────────────────────────────── -->
-	<!-- Each button is its own <form> so a single click submits to ?/setEnergy -->
-	<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
-		<p class="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-[#6b6b7a]">
-			Energy
-		</p>
-		<div class="flex gap-2">
-			{#each ENERGY_LEVELS as level}
-				<form method="POST" action="?/setEnergy" use:enhance>
-					<input type="hidden" name="dayId" value={data.day.id} />
-					<input type="hidden" name="energy" value={level.key} />
-					<button
-						type="submit"
-						title={level.label}
-						class="flex flex-col items-center gap-1 rounded-lg px-3 py-2 text-xl transition-colors
-						       {data.day.energy === level.key
-							? 'bg-purple-500/20 ring-1 ring-purple-500'
-							: 'bg-[#0c0c0f] hover:bg-[#1e1e2e]'}"
-					>
-						{level.emoji}
-						<span
-							class="font-mono text-xs {data.day.energy === level.key
-								? 'text-purple-400'
-								: 'text-[#6b6b7a]'}">{level.label}</span
-						>
-					</button>
-				</form>
-			{/each}
-		</div>
-	</div>
-
-	<!-- ── MVD Card ──────────────────────────────────────────────────────────── -->
-	<!-- MVD = Minimum Viable Day. One checkbox — is today a win? -->
-	<div
-		class="rounded-xl border p-4 transition-colors {data.day.mvdDone
-			? 'border-green-500/40 bg-green-500/5'
-			: 'border-[#1e1e2e] bg-[#161620]'}"
-	>
-		<form method="POST" action="?/toggleMvd" use:enhance class="flex items-start gap-3">
-			<input type="hidden" name="dayId" value={data.day.id} />
-			<input type="hidden" name="current" value={String(data.day.mvdDone)} />
-			<!-- Checkbox button — visually represents done/not-done state -->
-			<button
-				type="submit"
-				class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors
-				       {data.day.mvdDone
-					? 'border-green-500 bg-green-500'
-					: 'border-[#3e3e4e] hover:border-green-500'}"
-			>
-				{#if data.day.mvdDone}
-					<!-- Checkmark SVG — inline so no image request -->
-					<svg viewBox="0 0 12 12" fill="none" class="h-3 w-3">
-						<path
-							d="M2 6l3 3 5-5"
-							stroke="white"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-				{/if}
-			</button>
-			<div>
-				<p class="font-mono text-xs uppercase tracking-wider text-[#6b6b7a]">
-					Minimum Viable Day
-				</p>
-				<p
-					class="font-mono text-sm {data.day.mvdDone
-						? 'text-green-400 line-through'
-						: 'text-[#e2e2e8]'}"
-				>
-					{mvdHint}
-				</p>
-			</div>
-		</form>
-	</div>
-
-	<!-- ── Schedule / Events ─────────────────────────────────────────────────── -->
-	<div class="space-y-2">
-		<div class="flex items-center justify-between">
-			<h2 class="font-display text-sm font-semibold uppercase tracking-wider text-[#e2e2e8]">
+	<!-- ── Schedule ─────────────────────────────────────────────────────────── -->
+	<div class="space-y-1">
+		<!-- Header row -->
+		<div class="flex items-center justify-between py-1">
+			<span class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
 				Schedule
-			</h2>
-			<!-- Toggle the add-event form — plain JS, no server round-trip needed -->
-			<button
-				onclick={() => (showAddEvent = !showAddEvent)}
-				class="font-mono text-xs text-purple-400 transition-colors hover:text-purple-300"
-			>
-				{showAddEvent ? '✕ cancel' : '+ add event'}
-			</button>
+			</span>
+			<span class="font-mono text-[10px] text-[#3a3a4e]">
+				{data.user?.workdayStart ?? '09:00'} — {data.user?.workdayEnd ?? '18:00'}
+			</span>
 		</div>
 
 		{#if data.events.length === 0 && !showAddEvent}
-			<p class="py-1 font-mono text-xs text-[#6b6b7a]">No events today</p>
+			<p class="py-1 font-mono text-xs text-[#3a3a4e]">No events — add one below</p>
 		{/if}
 
 		{#each data.events as event}
 			{@const evArea = event.area ? areaFor(event.area, data.areas) : null}
 			{@const evColors = evArea ? colorClasses(evArea.color) : null}
+			{@const isActive = now >= event.startsAt && (!event.endsAt || now <= event.endsAt)}
 			<div
-				class="flex items-center gap-3 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2.5"
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
+					   {isActive ? 'bg-[#1e1e2e] border border-[#2a2a3e]' : 'bg-[#161620] border border-[#1e1e2e]'}"
 			>
-				<!-- Time in IST — startsAt comes from DB as Date via SvelteKit devalue -->
-				<!-- Show "HH:MM" or "HH:MM → HH:MM" when end time is set -->
-				<span class="shrink-0 font-mono text-sm font-medium text-purple-400">
-					{formatTimeIST(event.startsAt)}{event.endsAt ? " → " + formatTimeIST(event.endsAt) : ""}
+				<!-- Time -->
+				<span class="w-10 shrink-0 font-mono text-xs text-[#6b6b7a]">
+					{formatTimeIST(event.startsAt)}
 				</span>
-				<span class="flex-1 font-mono text-sm text-[#e2e2e8]">{event.title}</span>
+				<!-- Area color dot -->
 				{#if evArea && evColors}
-					<span
-						class="rounded px-1.5 py-0.5 font-mono text-xs {evColors.bg} {evColors.text}"
-					>
-						{evArea.emoji}
+					<span class="h-1.5 w-1.5 shrink-0 rounded-full {evColors.solid}"></span>
+				{:else}
+					<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#3a3a4e]"></span>
+				{/if}
+				<!-- Title -->
+				<span class="flex-1 font-mono text-sm {isActive ? 'text-[#e2e2e8]' : 'text-[#c8c8d4]'}">
+					{event.title}
+				</span>
+				<!-- ACTIVE badge -->
+				{#if isActive}
+					<span class="rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase
+								 tracking-widest bg-violet-500/10 text-violet-400">
+						Active
 					</span>
 				{/if}
+				<!-- Delete -->
 				<form method="POST" action="?/deleteEvent" use:enhance>
 					<input type="hidden" name="id" value={event.id} />
-					<button
-						type="submit"
-						class="font-mono text-xs text-[#3e3e4e] transition-colors hover:text-red-400"
-					>
+					<button type="submit" class="font-mono text-[10px] text-[#3e3e4e] transition-colors hover:text-red-400">
 						✕
 					</button>
 				</form>
 			</div>
 		{/each}
 
-		{#if showAddEvent}
-			<!-- Add event form — closes and resets on successful submit -->
+		<!-- Add event row -->
+		{#if !showAddEvent}
+			<button
+				onclick={() => (showAddEvent = true)}
+				class="flex items-center gap-2 py-1.5 font-mono text-xs text-[#3a3a4e]
+					   transition-colors hover:text-[#6b6b7a]"
+			>
+				<span class="text-base leading-none">+</span>
+				<span>Add Event</span>
+			</button>
+		{:else}
+			<!-- Add event form -->
 			<form
 				method="POST"
 				action="?/addEvent"
 				use:enhance={() => {
 					return async ({ update }) => {
-						await update(); // re-runs load() to refresh events list
+						await update();
 						showAddEvent = false;
 						newEventTitle = '';
 						newEventTime = '';
@@ -338,28 +347,22 @@
 					placeholder="Event title..."
 					class="w-full bg-transparent font-mono text-sm text-[#e2e2e8] placeholder-[#3e3e4e] outline-none"
 				/>
-				<!-- Row 1: start time → optional end time -->
 				<div class="flex items-center gap-2">
-					<!-- datetime-local input — user picks in IST, server converts to UTC -->
 					<input
 						bind:value={newEventTime}
 						type="datetime-local"
 						name="startsAt"
 						required
-						placeholder="Start time"
 						class="flex-1 rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1 font-mono text-xs text-[#e2e2e8] outline-none"
 					/>
 					<span class="font-mono text-xs text-[#3e3e4e]">→</span>
-					<!-- Optional end time — empty = no end time saved -->
 					<input
 						bind:value={newEventEndTime}
 						type="datetime-local"
 						name="endsAt"
-						placeholder="End time (optional)"
 						class="flex-1 rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1 font-mono text-xs text-[#e2e2e8] outline-none"
 					/>
 				</div>
-				<!-- Row 2: area, remind offset, submit -->
 				<div class="flex items-center gap-2">
 					<select
 						bind:value={newEventArea}
@@ -371,7 +374,6 @@
 							<option value={area.key}>{area.emoji} {area.label}</option>
 						{/each}
 					</select>
-					<!-- How many minutes before the event to send the Telegram reminder -->
 					<select
 						bind:value={newEventRemindOffset}
 						name="remindOffset"
@@ -386,50 +388,91 @@
 					</select>
 					<button
 						type="submit"
-						class="rounded bg-purple-500/20 px-3 py-1 font-mono text-xs text-purple-400 transition-colors hover:bg-purple-500/30"
+						class="rounded bg-violet-500/20 px-3 py-1 font-mono text-xs text-violet-400 transition-colors hover:bg-violet-500/30"
 					>
 						Add
+					</button>
+					<button
+						type="button"
+						onclick={() => (showAddEvent = false)}
+						class="font-mono text-xs text-[#3e3e4e] transition-colors hover:text-[#6b6b7a]"
+					>
+						✕
 					</button>
 				</div>
 			</form>
 		{/if}
 	</div>
 
-	<!-- ── Tasks ─────────────────────────────────────────────────────────────── -->
-	<div class="space-y-2">
-		<h2 class="font-display text-sm font-semibold uppercase tracking-wider text-[#e2e2e8]">
-			Tasks
-		</h2>
+	<!-- ── Active Tasks ─────────────────────────────────────────────────────── -->
+	<div class="space-y-1">
+		<!-- Header row -->
+		<div class="flex items-center justify-between py-1">
+			<span class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+				Active Tasks
+			</span>
+			{#if pendingTasks.length > 0}
+				<span class="rounded bg-[#1e1e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#6b6b7a]">
+					{pendingTasks.length} Pending
+				</span>
+			{/if}
+		</div>
 
 		<!-- Pending tasks -->
 		{#each pendingTasks as task}
 			{@const taskArea = task.area ? areaFor(task.area, data.areas) : null}
 			{@const taskColors = taskArea ? colorClasses(taskArea.color) : null}
 			<div
-				class="flex items-center gap-3 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2.5"
+				class="group flex items-center gap-2.5 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-3
+					   transition-colors hover:border-[#2a2a3e]"
 			>
-				<form method="POST" action="?/toggleTask" use:enhance>
+				<!-- Drag handle (visual only) -->
+				<span class="shrink-0 cursor-grab text-[#2a2a3e] transition-colors group-hover:text-[#3a3a4e]"
+					  style="font-size: 11px; line-height: 1; letter-spacing: -1px;">⠿</span>
+				<!-- Checkbox -->
+				<form method="POST" action="?/toggleTask" use:enhance class="shrink-0">
 					<input type="hidden" name="id" value={task.id} />
 					<input type="hidden" name="done" value={String(task.done)} />
 					<button
 						type="submit"
 						aria-label="Mark as done"
-						class="h-4 w-4 shrink-0 rounded border-2 border-[#3e3e4e] transition-colors hover:border-purple-500"
+						class="h-4 w-4 rounded border-2 border-[#3e3e4e] transition-colors hover:border-violet-500"
 					></button>
 				</form>
-				<span class="flex-1 font-mono text-sm text-[#e2e2e8]">{task.text}</span>
-				{#if taskArea && taskColors}
-					<span
-						class="rounded px-1.5 py-0.5 font-mono text-xs {taskColors.bg} {taskColors.text}"
-					>
-						{taskArea.emoji}
-					</span>
-				{/if}
-				<form method="POST" action="?/deleteTask" use:enhance>
+				<!-- Task content -->
+				<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+					<div class="flex items-center gap-1.5">
+						<span class="font-mono text-sm text-[#e2e2e8]">{task.text}</span>
+						<!-- Urgent dot -->
+						{#if task.priority === 'urgent'}
+							<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"></span>
+						{/if}
+					</div>
+					<!-- Area label + estimate row -->
+					<div class="flex items-center gap-2">
+						{#if taskArea && taskColors}
+							<span class="font-mono text-[9px] uppercase tracking-wider {taskColors.text}">
+								{taskArea.label}
+							</span>
+						{/if}
+						{#if task.estimatedMinutes}
+							<span class="flex items-center gap-1 font-mono text-[9px] text-[#3a3a4e]">
+								<svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+									<circle cx="4" cy="4" r="3" stroke="currentColor" stroke-width="1"/>
+									<path d="M4 2.5V4L5 5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+								</svg>
+								{task.estimatedMinutes}m
+							</span>
+						{/if}
+					</div>
+				</div>
+				<!-- Delete -->
+				<form method="POST" action="?/deleteTask" use:enhance class="shrink-0">
 					<input type="hidden" name="id" value={task.id} />
 					<button
 						type="submit"
-						class="font-mono text-xs text-[#3e3e4e] transition-colors hover:text-red-400"
+						class="font-mono text-[10px] text-[#2a2a3e] opacity-0 transition-all
+							   group-hover:opacity-100 hover:text-red-400"
 					>
 						✕
 					</button>
@@ -437,20 +480,21 @@
 			</div>
 		{/each}
 
-		<!-- Add task inline form — pressing Enter submits -->
+		<!-- Add task form -->
 		<form
 			method="POST"
 			action="?/addTask"
 			use:enhance={() => {
 				return async ({ update }) => {
 					await update();
-					newTaskText = ''; // clear the input after successful add
+					newTaskText = '';
 				};
 			}}
-			class="flex items-center gap-2 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2.5"
+			class="flex items-center gap-2 rounded-lg border border-dashed border-[#1e1e2e] bg-transparent
+				   px-3 py-2.5 transition-colors hover:border-[#2a2a3e]"
 		>
 			<input type="hidden" name="dayId" value={data.day.id} />
-			<span class="font-mono text-[#3e3e4e]">+</span>
+			<span class="font-mono text-sm text-[#3e3e4e]">+</span>
 			<input
 				bind:value={newTaskText}
 				name="text"
@@ -470,61 +514,46 @@
 			</select>
 		</form>
 
-		<!-- Completed tasks — collapsed by default to keep things clean -->
+		<!-- Show completed row -->
 		{#if doneTasks.length > 0}
 			<details class="group">
-				<!-- list-none removes the default triangle from <summary> -->
 				<summary
-					class="flex cursor-pointer list-none items-center gap-1.5 py-1 font-mono text-xs text-[#6b6b7a] transition-colors hover:text-[#e2e2e8]"
+					class="flex cursor-pointer list-none items-center gap-1.5 py-2 font-mono text-[10px]
+						   uppercase tracking-[0.08em] text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
 				>
-					<!-- Rotate arrow on open — `group-open:` targets the open state of parent <details> -->
-					<span class="inline-block transition-transform group-open:rotate-90">▶</span>
-					{doneTasks.length} completed
+					<span class="inline-block transition-transform group-open:rotate-90">›</span>
+					Show Completed ({doneTasks.length})
 				</summary>
 				<div class="mt-1 space-y-1">
 					{#each doneTasks as task}
 						{@const taskArea = task.area ? areaFor(task.area, data.areas) : null}
 						{@const taskColors = taskArea ? colorClasses(taskArea.color) : null}
 						<div
-							class="flex items-center gap-3 rounded-lg border border-[#1e1e2e]/50 bg-[#161620]/50 px-3 py-2"
+							class="flex items-center gap-2.5 rounded-lg border border-[#1e1e2e]/50 bg-[#161620]/50 px-3 py-2.5"
 						>
-							<form method="POST" action="?/toggleTask" use:enhance>
+							<form method="POST" action="?/toggleTask" use:enhance class="shrink-0">
 								<input type="hidden" name="id" value={task.id} />
 								<input type="hidden" name="done" value={String(task.done)} />
 								<button
 									type="submit"
-									aria-label="Mark as not done"
-									class="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-green-500/50 bg-green-500/10 transition-colors"
+									class="flex h-4 w-4 items-center justify-center rounded border-2
+										   border-green-500/50 bg-green-500/10"
 								>
 									<svg viewBox="0 0 12 12" fill="none" class="h-2.5 w-2.5">
-										<path
-											d="M2 6l3 3 5-5"
-											stroke="rgb(74 222 128)"
-											stroke-width="1.5"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										/>
+										<path d="M2 6l3 3 5-5" stroke="rgb(74 222 128)" stroke-width="1.5"
+											  stroke-linecap="round" stroke-linejoin="round"/>
 									</svg>
 								</button>
 							</form>
-							<span class="flex-1 font-mono text-sm text-[#6b6b7a] line-through"
-								>{task.text}</span
-							>
+							<span class="flex-1 font-mono text-sm text-[#6b6b7a] line-through">{task.text}</span>
 							{#if taskArea && taskColors}
-								<span
-									class="rounded px-1.5 py-0.5 font-mono text-xs opacity-50 {taskColors.bg} {taskColors.text}"
-								>
-									{taskArea.emoji}
+								<span class="font-mono text-[9px] uppercase tracking-wider opacity-50 {taskColors.text}">
+									{taskArea.label}
 								</span>
 							{/if}
-							<form method="POST" action="?/deleteTask" use:enhance>
+							<form method="POST" action="?/deleteTask" use:enhance class="shrink-0">
 								<input type="hidden" name="id" value={task.id} />
-								<button
-									type="submit"
-									class="font-mono text-xs text-[#3e3e4e] transition-colors hover:text-red-400"
-								>
-									✕
-								</button>
+								<button type="submit" class="font-mono text-[10px] text-[#3e3e4e] hover:text-red-400">✕</button>
 							</form>
 						</div>
 					{/each}
@@ -533,15 +562,12 @@
 		{/if}
 	</div>
 
-	<!-- ── Pomodoro Timer ────────────────────────────────────────────────────── -->
-	<PomodoroTimer dayId={data.day.id} sessions={data.day.pomodoroSessions} />
-
 	<!-- ── Brain Dump / Inbox ─────────────────────────────────────────────────── -->
 	<!-- Quick capture for anything on your mind — not tied to a specific time or task -->
-	<div class="space-y-2">
-		<h2 class="font-display text-sm font-semibold uppercase tracking-wider text-[#e2e2e8]">
+	<div class="hidden lg:block space-y-2">
+		<span class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
 			Brain Dump
-		</h2>
+		</span>
 
 		<!-- Capture form — pressing Enter submits -->
 		<form
@@ -578,7 +604,7 @@
 					<button
 						type="submit"
 						title="Convert to task"
-						class="px-1 font-mono text-xs text-[#6b6b7a] transition-colors hover:text-purple-400"
+						class="px-1 font-mono text-xs text-[#6b6b7a] transition-colors hover:text-violet-400"
 					>
 						→ task
 					</button>
@@ -596,24 +622,127 @@
 			</div>
 		{/each}
 	</div>
+  {/snippet}
 
-	<!-- ── Daily Note ─────────────────────────────────────────────────────────── -->
-	<!-- Free-form text. Auto-saves when you click/tab away (onblur). -->
-	<div class="space-y-2">
-		<h2 class="font-display text-sm font-semibold uppercase tracking-wider text-[#e2e2e8]">
-			Note
-		</h2>
-		<form method="POST" action="?/updateNote" use:enhance>
-			<input type="hidden" name="dayId" value={data.day.id} />
-			<!-- requestSubmit() is the modern way to programmatically submit — it triggers form validation -->
-			<textarea
-				name="note"
-				placeholder="How's the day going? Reflections, thoughts, blockers..."
-				onblur={(e) => e.currentTarget.form?.requestSubmit()}
-				class="min-h-[100px] w-full resize-none rounded-lg border border-[#1e1e2e] bg-[#161620] p-3
-				       font-mono text-sm text-[#e2e2e8] placeholder-[#3e3e4e] outline-none
-				       transition-colors focus:border-purple-500/50"
-			>{data.day.note}</textarea>
-		</form>
-	</div>
+  {#snippet panel()}
+    <!-- ── Current Capacity (Energy Picker) ─────────────────────────────────── -->
+    <PanelCard title="Current Capacity">
+      <!-- 2×2 grid of energy states -->
+      <div class="grid grid-cols-2 gap-2">
+        {#each ENERGY_LEVELS as level}
+          <form method="POST" action="?/setEnergy" use:enhance>
+            <input type="hidden" name="dayId" value={data.day.id} />
+            <input type="hidden" name="energy" value={level.key} />
+            <button
+              type="submit"
+              class="w-full rounded-lg p-3 text-center transition-all
+                     {data.day.energy === level.key
+                       ? 'bg-[#1e1e2e] ring-1 ring-violet-500/50'
+                       : 'bg-[#0c0c0f] hover:bg-[#161620]'}"
+            >
+              <div class="mb-1 text-lg">{level.emoji}</div>
+              <div class="font-mono text-[9px] uppercase tracking-widest
+                          {data.day.energy === level.key ? 'text-violet-400' : 'text-[#6b6b7a]'}">
+                {level.label}
+              </div>
+            </button>
+          </form>
+        {/each}
+      </div>
+    </PanelCard>
+
+    <!-- ── MVD Goal ──────────────────────────────────────────────────────────── -->
+    <div class="rounded-xl border-l-4 border-amber-500/60 bg-[#161620] px-4 py-3">
+      <form method="POST" action="?/toggleMvd" use:enhance class="flex items-start gap-3">
+        <input type="hidden" name="dayId" value={data.day.id} />
+        <input type="hidden" name="current" value={String(data.day.mvdDone)} />
+        <button
+          type="submit"
+          class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors
+                 {data.day.mvdDone
+                   ? 'border-amber-500 bg-amber-500/20'
+                   : 'border-[#3e3e4e] hover:border-amber-500'}"
+        >
+          {#if data.day.mvdDone}
+            <svg viewBox="0 0 12 12" fill="none" class="h-2.5 w-2.5">
+              <path d="M2 6l3 3 5-5" stroke="rgb(251 191 36)" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          {/if}
+        </button>
+        <div>
+          <p class="font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-500/70">
+            MVD Goal
+          </p>
+          <p class="mt-0.5 font-mono text-sm {data.day.mvdDone ? 'text-[#6b6b7a] line-through' : 'text-[#e2e2e8]'}">
+            {mvdHint}
+          </p>
+        </div>
+      </form>
+    </div>
+
+    <!-- ── Pomodoro Timer ────────────────────────────────────────────────────── -->
+    <div id="pomodoro-panel">
+      <PomodoroTimer dayId={data.day.id} sessions={data.day.pomodoroSessions} />
+    </div>
+
+    <!-- ── Daily Note ────────────────────────────────────────────────────────── -->
+    <PanelCard title="Daily Note">
+      <form method="POST" action="?/updateNote" use:enhance>
+        <input type="hidden" name="dayId" value={data.day.id} />
+        <textarea
+          name="note"
+          placeholder="Capturing thoughts, ideas, and reflections for later..."
+          onblur={(e) => e.currentTarget.form?.requestSubmit()}
+          class="min-h-[80px] w-full resize-none bg-transparent font-mono text-xs
+                 leading-relaxed text-[#c8c8d4] placeholder-[#3a3a4e] outline-none"
+        >{data.day.note}</textarea>
+      </form>
+    </PanelCard>
+  {/snippet}
+</TwoColumnPage>
+
+<!-- ── Mobile Quick Capture Bar ─────────────────────────────────────────── -->
+<!-- Fixed above the mobile bottom nav. Desktop: hidden (Brain Dump section handles it). -->
+<div
+  class="lg:hidden fixed left-0 right-0 z-30 border-t border-[#1e1e2e] bg-[#12121c]/95 px-4 py-2 backdrop-blur-sm"
+  style="bottom: calc(4rem + env(safe-area-inset-bottom))"
+>
+  <form
+    method="POST"
+    action="?/addInboxItem"
+    use:enhance={() => {
+      return async ({ update }) => {
+        await update();
+        newInboxText = '';
+      };
+    }}
+    class="flex items-center gap-2 rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-2"
+  >
+    <!-- Capture icon -->
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="shrink-0 text-[#3a3a4e]">
+      <rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M4 6H8M6 4V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    <input
+      bind:value={newInboxText}
+      name="text"
+      placeholder="Quick capture brain dump..."
+      class="flex-1 bg-transparent font-mono text-sm text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
+    />
+    <!-- Task icon button -->
+    <button
+      type="submit"
+      name="captureType"
+      value="inbox"
+      class="shrink-0 text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
+      aria-label="Save to inbox"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M4.5 7L6.5 9L9.5 5" stroke="currentColor" stroke-width="1.2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </form>
 </div>

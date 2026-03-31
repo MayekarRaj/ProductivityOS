@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../../../../../../../trigger/jobs/weeklyReview.ts"],
-  "sourcesContent": ["// Weekly review prompt — Sunday 7:00pm IST.\n//\n// Sends a prompt to do the Sunday review in the app.\n// Sunday 7:00pm IST = Sunday 1:30pm UTC → cron \"30 13 * * 0\"\n\nimport { schedules } from '@trigger.dev/sdk/v3';\nimport { sendMessage } from '../utils/telegram';\nimport { getTelegramChatId } from '../utils/user';\n\nexport const weeklyReviewJob = schedules.task({\n\tid: 'weekly-review',\n\t// 1:30pm UTC on Sundays = 7:00pm IST on Sundays\n\tcron: '30 13 * * 0',\n\n\trun: async () => {\n\t\tconst chatId = await getTelegramChatId();\n\t\tif (!chatId) return { skipped: 'no telegram linked' };\n\n\t\tawait sendMessage(\n\t\t\tchatId,\n\t\t\t`📝 *Sunday Review time!*\\n\\nTake 10 minutes to reflect on the week:\\n• What were the most important things you did?\\n• What shifted or got delayed?\\n• What's your fitness plan for next week?\\n\\nOpen the app → Week tab to fill in your review.`,\n\t\t\t'Markdown'\n\t\t);\n\n\t\treturn { sent: true };\n\t}\n});\n"],
-  "mappings": ";;;;;;;;;;;;;AAAA;AASO,IAAM,kBAAkB,kBAAU,KAAK;AAAA,EAC7C,IAAI;AAAA;AAAA,EAEJ,MAAM;AAAA,EAEN,KAAK,YAAY;AAChB,UAAM,SAAS,MAAM,kBAAkB;AACvC,QAAI,CAAC,OAAQ,QAAO,EAAE,SAAS,qBAAqB;AAEpD,UAAM;AAAA,MACL;AAAA,MACA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA,MACA;AAAA,IACD;AAEA,WAAO,EAAE,MAAM,KAAK;AAAA,EACrB;AACD,CAAC;",
-  "names": []
-}

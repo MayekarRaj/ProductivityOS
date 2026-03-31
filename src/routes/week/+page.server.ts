@@ -4,7 +4,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { days, tasks, events, sundayReviews } from '$lib/db/schema';
+import { days, tasks, events, sundayReviews, inboxItems } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekDatesIST, getMondayOfWeekIST } from '$lib/utils/dates';
 import { generateSundayReviewDraft } from '$lib/server/ai';
@@ -24,10 +24,20 @@ export type DayData = {
 };
 
 // ─── Load ─────────────────────────────────────────────────────────────────────
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ url }) => {
 	const todayStr = getTodayDateIST();
-	const weekDates = getWeekDatesIST(); // ['2026-03-23', ..., '2026-03-29'] Mon→Sun
-	const weekStartDate = getMondayOfWeekIST(); // 'YYYY-MM-DD' (Monday) — key for sunday_reviews
+
+	// If ?week=YYYY-MM-DD is in the URL, use that Monday; otherwise default to current week.
+	const weekParam = url.searchParams.get('week');
+	const weekStartDate = weekParam ?? getMondayOfWeekIST();
+	const weekDates = weekParam
+		? Array.from({ length: 7 }, (_, i) => {
+				const d = new Date(weekParam + 'T00:00:00+05:30');
+				d.setDate(d.getDate() + i);
+				return d.toISOString().slice(0, 10);
+			})
+		: getWeekDatesIST();
+	const isCurrentWeek = weekStartDate === getMondayOfWeekIST();
 
 	// Single query for all day rows this week (instead of 7 separate queries)
 	const weekDayRows = await db
@@ -76,7 +86,7 @@ export const load: PageServerLoad = async () => {
 		};
 	}
 
-	return { weekDates, todayStr, weekStartDate, dayMap, sundayReview };
+	return { weekDates, todayStr, weekStartDate, dayMap, sundayReview, isCurrentWeek };
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -134,6 +144,14 @@ export const actions: Actions = {
 				fitnessPlan
 			});
 		}
+	},
+
+	addInboxItem: async ({ request }) => {
+		const { fail } = await import('@sveltejs/kit');
+		const data = await request.formData();
+		const text = (data.get('text') as string)?.trim();
+		if (!text) return fail(400, { error: 'Text required' });
+		await db.insert(inboxItems).values({ userId: DEFAULT_USER_ID, text, source: 'web' });
 	},
 
 	// ── 9.4: Generate a Sunday review draft using AI ─────────────────────────

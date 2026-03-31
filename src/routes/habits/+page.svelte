@@ -6,6 +6,8 @@
 	import { isDueOnDay, heatmapStatus } from '$lib/utils/habits';
 	import type { HeatmapStatus } from '$lib/utils/habits';
 	import { Archive, ArchiveRestore } from 'lucide-svelte';
+	import TwoColumnPage from '$lib/components/TwoColumnPage.svelte';
+	import PanelCard from '$lib/components/PanelCard.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -82,118 +84,20 @@
 	let skipErrors = $state<Record<string, string>>({});
 </script>
 
-<div class="space-y-8">
+<TwoColumnPage>
+  {#snippet main()}
 	<!-- ── Header ──────────────────────────────────────────────────────────── -->
-	<div class="flex items-start justify-between">
+	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">Habits</h1>
-			<p class="font-mono text-sm text-[#6b6b7a]">{data.habits.length} active</p>
+			<p class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+				Today's Habits
+			</p>
+			<div class="flex items-center gap-2">
+				<span class="font-mono text-[10px] text-[#3a3a4e]">System.Status:</span>
+				<span class="font-mono text-[10px] font-semibold text-green-400">Active</span>
+			</div>
 		</div>
-		<button
-			onclick={() => (showAddForm = !showAddForm)}
-			class="rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-1.5 font-mono text-xs
-				text-[#e2e2e8] transition-colors hover:border-[#2a2a3e]"
-		>
-			{showAddForm ? 'Cancel' : '+ Add habit'}
-		</button>
 	</div>
-
-	<!-- ── Add Habit Form ───────────────────────────────────────────────────── -->
-	{#if showAddForm}
-		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
-			<h2 class="mb-4 font-display text-sm font-semibold text-[#e2e2e8]">New habit</h2>
-			<form
-				method="POST"
-				action="?/addHabit"
-				use:enhance={() => {
-					return async ({ update, result }) => {
-						await update();
-						if (result.type !== 'failure') resetForm();
-					};
-				}}
-				class="space-y-4"
-			>
-				<!-- Name -->
-				<div>
-					<label class="mb-1 block font-mono text-xs text-[#6b6b7a]">Name</label>
-					<input
-						type="text"
-						name="name"
-						bind:value={newName}
-						required
-						placeholder="e.g. Morning workout"
-						class="w-full rounded-lg border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
-							font-mono text-sm text-[#e2e2e8] placeholder-[#3a3a4e]
-							focus:outline-none focus:ring-1 focus:ring-white/20"
-					/>
-				</div>
-
-				<div class="grid grid-cols-2 gap-4">
-					<!-- Area -->
-					<div>
-						<label class="mb-1 block font-mono text-xs text-[#6b6b7a]">Area</label>
-						<select
-							name="area"
-							bind:value={newArea}
-							class="w-full rounded-lg border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
-								font-mono text-xs text-[#e2e2e8] focus:outline-none focus:ring-1 focus:ring-white/20"
-						>
-							{#each data.areas.filter(a => !a.suspended) as a}
-								<option value={a.key}>{a.emoji} {a.label}</option>
-							{/each}
-						</select>
-					</div>
-
-					<!-- Frequency -->
-					<div>
-						<label class="mb-1 block font-mono text-xs text-[#6b6b7a]">Frequency</label>
-						<select
-							name="frequency"
-							bind:value={newFrequency}
-							class="w-full rounded-lg border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
-								font-mono text-xs text-[#e2e2e8] focus:outline-none focus:ring-1 focus:ring-white/20"
-						>
-							<option value="daily">Daily</option>
-							<option value="weekdays">Weekdays (Mon–Fri)</option>
-							<option value="3x">3× week (Mon/Wed/Fri)</option>
-							<option value="custom">Custom days</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- Custom days picker — only shown when frequency = 'custom' -->
-				{#if newFrequency === 'custom'}
-					<div>
-						<label class="mb-2 block font-mono text-xs text-[#6b6b7a]">Select days</label>
-						<div class="flex flex-wrap gap-2">
-							{#each DAY_NAMES as day}
-								<button
-									type="button"
-									onclick={() => toggleCustomDay(day)}
-									class="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors
-										{customDays.has(day)
-										? 'border-white/30 bg-white/10 text-white'
-										: 'border-[#1e1e2e] bg-[#0c0c0f] text-[#6b6b7a]'}"
-								>
-									{day}
-								</button>
-							{/each}
-						</div>
-					</div>
-					<!-- Hidden input carries the selected days to the server -->
-					<input type="hidden" name="customDays" value={customDaysValue} />
-				{/if}
-
-				<button
-					type="submit"
-					class="rounded-lg bg-white px-4 py-2 font-mono text-xs font-semibold text-[#0c0c0f]
-						transition-opacity hover:opacity-90"
-				>
-					Add habit
-				</button>
-			</form>
-		</div>
-	{/if}
 
 	<!-- ── Today's Habits ───────────────────────────────────────────────────── -->
 	<!--
@@ -305,75 +209,44 @@
 		{/if}
 	</div>
 
-	<!-- ── All Habits (with heatmap) ────────────────────────────────────────── -->
-	<!--
-		Full list of active habits. Each row shows:
-		  area badge | name | frequency | heatmap (7 squares) | streak | archive button
-	-->
+	<!-- ── All Habits (table layout with heatmap) ───────────────────────────── -->
 	<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
-		<p class="mb-4 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
-			All habits
-		</p>
+		<div class="space-y-1">
+			<p class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+				All Habits
+			</p>
 
-		{#if data.habits.length === 0}
-			<p class="font-mono text-xs text-[#6b6b7a]">No habits yet</p>
-		{:else}
-			<ul class="space-y-4">
+			{#if data.habits.length === 0}
+				<p class="font-mono text-xs text-[#3a3a4e]">No habits yet — add one from the panel</p>
+			{:else}
+				<!-- Table header -->
+				<div class="grid grid-cols-[1fr_auto_auto] gap-4 border-b border-[#1e1e2e] pb-1.5">
+					<span class="font-mono text-[9px] uppercase tracking-[0.1em] text-[#3a3a4e]">Habit / Area</span>
+					<span class="font-mono text-[9px] uppercase tracking-[0.1em] text-[#3a3a4e]">7-Day History</span>
+					<span class="font-mono text-[9px] uppercase tracking-[0.1em] text-[#3a3a4e]">Streak</span>
+				</div>
+				<!-- Table rows -->
 				{#each data.habits as habit}
-					{@const area = areaFor(habit.area)}
-
-					<li class="flex flex-col gap-2">
-						<!-- Top row: area badge, name, frequency, streak, archive -->
-						<div class="flex items-center gap-2">
-							{#if area}
-								<span
-									class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5
-										font-mono text-[10px] {colorClasses(area.color).bg} {colorClasses(area.color).text}"
-								>
-									{area.emoji}
-									{area.label}
-								</span>
-							{/if}
-
-							<span class="flex-1 font-mono text-sm text-[#e2e2e8]">{habit.name}</span>
-
-							<span class="font-mono text-[10px] text-[#6b6b7a]">
-								{habit.frequency === 'daily'
-									? 'Daily'
-									: habit.frequency === 'weekdays'
-										? 'Weekdays'
-										: habit.frequency === '3x'
-											? '3× week'
-											: 'Custom'}
-							</span>
-
-							{#if data.streaks[habit.id] > 0}
-								<span class="font-mono text-xs text-[#6b6b7a]" title="Streak">
-									🔥 {data.streaks[habit.id]}
-								</span>
-							{/if}
-
-							<!-- Archive (soft delete) -->
-							<form method="POST" action="?/archiveHabit" use:enhance>
-								<input type="hidden" name="id" value={habit.id} />
-								<button
-									type="submit"
-									class="rounded p-1 text-[#6b6b7a] transition-colors hover:bg-red-500/10 hover:text-red-400"
-									title="Archive habit"
-								>
-									<Archive size={13} />
-								</button>
-							</form>
+					{@const a = areaFor(habit.area)}
+					{@const streak = data.streaks[habit.id] ?? 0}
+					<div class="grid grid-cols-[1fr_auto_auto] items-center gap-4 py-2 border-b border-[#1e1e2e]/40
+								last:border-0 hover:bg-[#161620] rounded-lg px-1 transition-colors">
+						<!-- Name + Area -->
+						<div class="min-w-0">
+							<p class="font-mono text-xs text-[#e2e2e8] truncate">{habit.name}</p>
+							<div class="flex items-center gap-1.5 mt-0.5">
+								{#if a}
+									<span class="font-mono text-[9px] uppercase tracking-wide {colorClasses(a.color).text}">
+										{a.label}
+									</span>
+									<span class="text-[#3a3a4e]">·</span>
+								{/if}
+								<span class="font-mono text-[9px] uppercase text-[#3a3a4e]">{habit.frequency}</span>
+							</div>
 						</div>
-
-						<!-- Heatmap row: 7 squares for Mon–Sun -->
-						<!--
-							Each square represents one day of the current week.
-							Color encodes status: done=green, skipped=yellow,
-							missed=faint red, pending=outlined, future/not-scheduled=dim
-						-->
-						<div class="flex gap-1 pl-1">
-							{#each data.weekDates as date, i}
+						<!-- 7-day heatmap squares -->
+						<div class="flex gap-1">
+							{#each data.weekDates as date}
 								{@const weekday = weekdayFor(date)}
 								{@const log = data.logMap[habit.id]?.[date]}
 								{@const status = heatmapStatus(
@@ -384,25 +257,27 @@
 									data.todayStr,
 									log
 								)}
-								<div
+								<span
 									class="h-4 w-4 rounded-sm {HEATMAP_CLASSES[status]}"
-									title="{date} ({weekday}) — {HEATMAP_TITLE[status]}"
-								></div>
-							{/each}
-							<!-- Day labels below squares -->
-						</div>
-						<!-- Weekday labels aligned under heatmap squares -->
-						<div class="flex gap-1 pl-1">
-							{#each data.weekDates as _, i}
-								<div class="w-4 text-center font-mono text-[8px] text-[#3a3a4e]">
-									{['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
-								</div>
+									title={HEATMAP_TITLE[status]}
+								></span>
 							{/each}
 						</div>
-					</li>
+						<!-- Streak + archive -->
+						<div class="flex items-center gap-2">
+							<span class="font-mono text-xs font-semibold text-[#e2e2e8]">{streak}s</span>
+							<form method="POST" action={habit.archived ? '?/unarchiveHabit' : '?/archiveHabit'} use:enhance>
+								<input type="hidden" name="id" value={habit.id} />
+								<button type="submit"
+										class="font-mono text-[9px] uppercase text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]">
+									{habit.archived ? 'Restore' : 'Archive'}
+								</button>
+							</form>
+						</div>
+					</div>
 				{/each}
-			</ul>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
 	<!-- ── Archived Habits ──────────────────────────────────────────────────── -->
@@ -439,4 +314,145 @@
 			</ul>
 		</div>
 	{/if}
-</div>
+  {/snippet}
+
+  {#snippet panel()}
+    <!-- ── Add Habit Form ── -->
+    <PanelCard title="Add Habit">
+      <form
+        method="POST"
+        action="?/addHabit"
+        use:enhance={() => {
+          return async ({ result, update }) => {
+            await update();
+            if (result.type !== 'failure') {
+              newName = '';
+              newFrequency = 'daily';
+              customDays = new Set();
+            }
+          };
+        }}
+        class="space-y-3"
+      >
+        <!-- Habit name -->
+        <div>
+          <label class="mb-1 block font-mono text-[9px] uppercase tracking-[0.1em] text-[#6b6b7a]">
+            Habit Name
+          </label>
+          <input
+            type="text"
+            name="name"
+            bind:value={newName}
+            required
+            placeholder="e.g. Weekly Review"
+            class="w-full border-b border-[#2a2a3e] bg-transparent pb-1.5 font-mono text-sm
+                   text-[#e2e2e8] placeholder-[#3a3a4e] outline-none
+                   focus:border-violet-500/50 transition-colors"
+          />
+        </div>
+
+        <!-- Area picker -->
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="mb-1 block font-mono text-[9px] uppercase tracking-[0.1em] text-[#6b6b7a]">
+              Area
+            </label>
+            <select
+              name="area"
+              bind:value={newArea}
+              class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1.5
+                     font-mono text-xs text-[#e2e2e8] outline-none"
+            >
+              {#each data.areas.filter(a => !a.suspended) as a}
+                <option value={a.key}>{a.emoji} {a.label}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block font-mono text-[9px] uppercase tracking-[0.1em] text-[#6b6b7a]">
+              Frequency
+            </label>
+            <select
+              name="frequency"
+              bind:value={newFrequency}
+              class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1.5
+                     font-mono text-xs text-[#e2e2e8] outline-none"
+            >
+              <option value="daily">Daily</option>
+              <option value="weekdays">Weekdays</option>
+              <option value="3x">3×/Week</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Custom days (only shown when frequency = custom) -->
+        {#if newFrequency === 'custom'}
+          <input type="hidden" name="customDays" value={customDaysValue} />
+          <div class="flex flex-wrap gap-1.5">
+            {#each DAY_NAMES as day}
+              <button
+                type="button"
+                onclick={() => {
+                  const s = new Set(customDays);
+                  if (s.has(day)) s.delete(day); else s.add(day);
+                  customDays = s;
+                }}
+                class="rounded px-2 py-0.5 font-mono text-[10px] transition-colors
+                       {customDays.has(day)
+                         ? 'bg-violet-500/20 text-violet-400'
+                         : 'bg-[#1e1e2e] text-[#6b6b7a] hover:text-[#e2e2e8]'}"
+              >{day}</button>
+            {/each}
+          </div>
+        {/if}
+
+        <button
+          type="submit"
+          class="w-full rounded bg-violet-500/20 py-2 font-mono text-[10px] font-semibold
+                 uppercase tracking-[0.12em] text-violet-400 transition-colors
+                 hover:bg-violet-500/30"
+        >
+          Initialize Habit
+        </button>
+      </form>
+    </PanelCard>
+
+    <!-- ── Efficiency Protocol ── -->
+    <PanelCard title="Efficiency Protocol">
+      <div class="space-y-3">
+        <!-- Completion rate -->
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs text-[#6b6b7a]">Completion Rate</span>
+            <span class="font-mono text-lg font-bold text-violet-400">
+              {data.completionRate ?? 0}%
+            </span>
+          </div>
+          <div class="mt-1.5 h-1 w-full rounded-full bg-[#1e1e2e]">
+            <div
+              class="h-full rounded-full bg-violet-500 transition-all"
+              style="width: {data.completionRate ?? 0}%"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="rounded-lg bg-[#0c0c0f] p-3">
+            <p class="font-mono text-[9px] uppercase tracking-wider text-[#3a3a4e]">Total Streaks</p>
+            <p class="mt-0.5 font-mono text-xl font-bold text-[#e2e2e8]">
+              {Object.values(data.streaks).reduce((s, v) => s + v, 0)}
+            </p>
+          </div>
+          <div class="rounded-lg bg-[#0c0c0f] p-3">
+            <p class="font-mono text-[9px] uppercase tracking-wider text-[#3a3a4e]">Missed Log</p>
+            <p class="mt-0.5 font-mono text-xl font-bold text-[#e2e2e8]">
+              {data.missedCount ?? 0}
+            </p>
+          </div>
+        </div>
+      </div>
+    </PanelCard>
+  {/snippet}
+</TwoColumnPage>

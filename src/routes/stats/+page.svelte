@@ -1,10 +1,29 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import type { PageData } from './$types';
 	import { areaFor as areaForHelper, colorClasses } from '$lib/constants/areas';
+	import TwoColumnPage from '$lib/components/TwoColumnPage.svelte';
+	import PanelCard from '$lib/components/PanelCard.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	const { stats } = data;
+
+	// Week-over-week deltas
+	const tasksDelta = $derived(
+		data.prevStats ? stats.tasksDoneTotal - data.prevStats.tasksDoneTotal : null
+	);
+	const habitsDelta = $derived(
+		data.prevStats
+			? Math.round((stats.habitsCompleted as number) - ((data.prevStats.habitsCompleted as number) ?? 0))
+			: null
+	);
+
+	// Pomodoro as hours
+	const pomodoroHours = $derived(Math.round(stats.pomodorosTotal * 25 / 60 * 10) / 10);
+
+	// Current focus local state
+	let currentFocusText = $state(data.user?.currentFocus ?? '');
 
 	// ── SVG chart helpers ─────────────────────────────────────────────────────
 	// Line chart: maps 7 data points into SVG coordinates.
@@ -41,47 +60,55 @@
 	}
 </script>
 
-<div class="space-y-6">
+<TwoColumnPage>
+  {#snippet main()}
 	<!-- ── Header ──────────────────────────────────────────────────────────── -->
 	<div>
-		<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">Stats</h1>
-		<p class="font-mono text-sm text-[#6b6b7a]">This week at a glance</p>
+		<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">Performance Review</h1>
+		<p class="font-mono text-[10px] text-[#6b6b7a]">
+			Week of {data.weekDates?.[0] ?? ''} — {data.weekDates?.[6] ?? ''}
+		</p>
 	</div>
 
-	<!-- ── 5.1 Summary Cards ────────────────────────────────────────────────── -->
+	<!-- ── Summary Cards ────────────────────────────────────────────────────── -->
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-		{#each [
-			{ label: 'Tasks done', value: stats.tasksDoneTotal, icon: '✓' },
-			{ label: 'MVD days', value: stats.mvdDays, icon: '🎯' },
-			{ label: 'Habits done', value: stats.habitsCompleted, icon: '🔁' },
-			{ label: 'Pomodoros', value: stats.pomodorosTotal, icon: '🍅' }
-		] as card}
-			<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
-				<p class="font-mono text-lg">{card.icon}</p>
-				<p class="font-display text-2xl font-bold text-[#e2e2e8]">{card.value}</p>
-				<p class="font-mono text-xs text-[#6b6b7a]">{card.label}</p>
-			</div>
-		{/each}
+		<!-- Tasks done -->
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
+			<p class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">Tasks Done</p>
+			<p class="font-display text-2xl font-bold text-[#e2e2e8]">{stats.tasksDoneTotal}</p>
+			{#if tasksDelta !== null}
+				<p class="font-mono text-[10px] {tasksDelta >= 0 ? 'text-green-400' : 'text-red-400'}">
+					{tasksDelta >= 0 ? '+' : ''}{tasksDelta} vs last week
+				</p>
+			{/if}
+		</div>
+		<!-- MVD days -->
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
+			<p class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">MVD Days</p>
+			<p class="font-display text-2xl font-bold text-[#e2e2e8]">
+				{stats.mvdDays}<span class="font-mono text-sm text-[#3a3a4e]">/07</span>
+			</p>
+		</div>
+		<!-- Habits -->
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
+			<p class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">Habits Done</p>
+			<p class="font-display text-2xl font-bold text-[#e2e2e8]">{stats.habitsCompleted}%</p>
+			{#if habitsDelta !== null}
+				<p class="font-mono text-[10px] {habitsDelta >= 0 ? 'text-green-400' : 'text-red-400'}">
+					{habitsDelta >= 0 ? '+' : ''}{habitsDelta}% vs last week
+				</p>
+			{/if}
+		</div>
+		<!-- Focus hours -->
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-4">
+			<p class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">Focus Time</p>
+			<p class="font-display text-2xl font-bold text-[#e2e2e8]">
+				{pomodoroHours}<span class="font-mono text-sm text-[#3a3a4e]"> hrs</span>
+			</p>
+		</div>
 	</div>
 
-	<!-- ── 5.5 Weekly Wins ──────────────────────────────────────────────────── -->
-	{#if stats.wins.length > 0}
-		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
-			<p class="mb-3 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
-				Weekly wins
-			</p>
-			<ul class="space-y-1.5">
-				{#each stats.wins as win}
-					<li class="flex items-start gap-2 font-mono text-sm text-[#e2e2e8]">
-						<span class="mt-0.5 text-green-400">✦</span>
-						{win}
-					</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
-
-	<!-- ── 5.3 Energy vs Completion ─────────────────────────────────────────── -->
+	<!-- ── Energy vs Velocity ───────────────────────────────────────────────── -->
 	<!--
 		Dual line chart — energy level (red) and task completion scaled to 0–4 (blue).
 		Both use the same 0–4 scale so they can share one SVG.
@@ -89,7 +116,7 @@
 	-->
 	<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
 		<p class="mb-1 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
-			Energy vs Completion
+			Energy vs Velocity
 		</p>
 		<p class="mb-4 font-mono text-[10px] text-[#3a3a4e]">
 			<span class="text-red-400">─</span> energy &nbsp;
@@ -259,4 +286,38 @@
 			</ul>
 		{/if}
 	</div>
-</div>
+  {/snippet}
+
+  {#snippet panel()}
+    <!-- ── Current Focus ── -->
+    <PanelCard title="Current Focus">
+      <form method="POST" action="?/updateFocus" use:enhance>
+        <textarea
+          name="currentFocus"
+          bind:value={currentFocusText}
+          onblur={(e) => e.currentTarget.form?.requestSubmit()}
+          placeholder="What's your focus this week? (auto-saves)"
+          rows="3"
+          class="w-full resize-none bg-transparent font-mono text-xs leading-relaxed
+                 text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
+        ></textarea>
+      </form>
+    </PanelCard>
+
+    <!-- ── Weekly Wins ── -->
+    {#if stats.wins.length > 0}
+      <PanelCard title="Weekly Wins">
+        <ul class="space-y-2">
+          {#each stats.wins as win, i}
+            <li class="flex items-start gap-2">
+              <span class="shrink-0 font-mono text-[10px] font-bold text-violet-400/60">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <p class="font-mono text-xs leading-relaxed text-[#c8c8d4]">{win}</p>
+            </li>
+          {/each}
+        </ul>
+      </PanelCard>
+    {/if}
+  {/snippet}
+</TwoColumnPage>

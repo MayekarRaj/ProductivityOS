@@ -10,7 +10,7 @@ import { habits, habitLogs } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { STARTER_HABITS } from '$lib/constants/defaults';
 import { getTodayDateIST, getWeekDatesIST, getWeekdayIST, getMondayOfWeekIST } from '$lib/utils/dates';
-import { calculateStreak } from '$lib/utils/habits';
+import { calculateStreak, isDueOnDay } from '$lib/utils/habits';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type HabitRow = typeof habits.$inferSelect;
@@ -92,7 +92,23 @@ export const load: PageServerLoad = async () => {
 		streaks[habit.id] = calculateStreak(habitLogEntries);
 	}
 
-	return { todayStr, weekDates, todayWeekday, habits: habitRows, archivedHabits: archivedRows, logMap, streaks };
+	// ── Compute completionRate: % of today's due habits that are logged 'done' ─
+	// We need to know which habits are due today and how many are done.
+	const dueTodayIds = habitRows
+		.filter((h) => isDueOnDay(h.frequency, h.customDays ?? null, todayWeekday))
+		.map((h) => h.id);
+	const dueCount = dueTodayIds.length;
+	const doneCount = dueTodayIds.filter((id) => logMap[id]?.[todayStr]?.status === 'done').length;
+	const completionRate = dueCount > 0 ? Math.round((doneCount / dueCount) * 100) : 0;
+
+	// ── Compute missedCount: habits logged as 'missed' this week ─────────────
+	// recentLogs covers last 30 days so we just filter to current week dates.
+	const weekStart = weekDates[0]; // Monday of current week (getWeekDatesIST returns Mon–Sun)
+	const missedCount = recentLogs.filter(
+		(l) => l.status === 'missed' && l.date >= weekStart && l.date <= todayStr
+	).length;
+
+	return { todayStr, weekDates, todayWeekday, habits: habitRows, archivedHabits: archivedRows, logMap, streaks, completionRate, missedCount };
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────

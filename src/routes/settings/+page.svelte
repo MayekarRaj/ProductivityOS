@@ -2,6 +2,8 @@
 	import { enhance } from '$app/forms';
 	import type { PageData } from './$types';
 	import { COLOR_OPTIONS, colorClasses } from '$lib/constants/areas';
+	import TwoColumnPage from '$lib/components/TwoColumnPage.svelte';
+	import PanelCard from '$lib/components/PanelCard.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -30,21 +32,36 @@
 
 	// ── Delete error state ────────────────────────────────────────────────────
 	let deleteErrors = $state<Record<string, string>>({});
+
+	// ── Schedule state (from user preferences via layout) ────────────────────
+	let workdayStart = $state(data.user?.workdayStart ?? '09:00');
+	let workdayEnd = $state(data.user?.workdayEnd ?? '18:00');
+	let autoFocusMode = $state(data.user?.autoFocusMode ?? false);
+	let weekendThreshold = $state(data.user?.weekendThreshold ?? '14:00');
+
+	// ── Color → hex map for swatch display ───────────────────────────────────
+	const COLOR_HEX: Record<string, string> = {
+		blue: '#60a5fa', purple: '#c084fc', green: '#4ade80', orange: '#fb923c',
+		rose: '#fb7185', amber: '#fbbf24', teal: '#2dd4bf', pink: '#f472b6',
+		red: '#f87171', indigo: '#818cf8'
+	};
 </script>
 
-<div class="space-y-8">
+<TwoColumnPage>
+  {#snippet main()}
 	<!-- Header -->
 	<div class="flex items-start justify-between">
 		<div>
 			<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">Settings</h1>
-			<p class="font-mono text-sm text-[#6b6b7a]">Manage your areas</p>
+			<p class="font-mono text-[10px] text-[#6b6b7a]">Configuration // System Identity</p>
 		</div>
 		<button
 			onclick={() => (showAdd = !showAdd)}
-			class="rounded-lg border border-[#1e1e2e] bg-[#161620] px-3 py-1.5 font-mono text-xs
-				text-[#e2e2e8] transition-colors hover:border-[#2a2a3e]"
+			class="rounded border border-[#2a2a3e] px-3 py-1.5 font-mono text-[10px] uppercase
+				tracking-widest text-[#6b6b7a] transition-colors hover:border-violet-500/40
+				hover:text-violet-400"
 		>
-			{showAdd ? 'Cancel' : '+ New area'}
+			{showAdd ? 'Cancel' : '+ Add Context'}
 		</button>
 	</div>
 
@@ -193,28 +210,61 @@
 								</div>
 							</form>
 						{:else}
-							<!-- Display mode -->
-							<div class="flex items-center gap-3">
-								<span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs {colors.bg} {colors.text}">
-									{area.emoji} {area.label}
+							<!-- Display mode — richer row -->
+							<div class="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors
+							            hover:bg-[#161620]">
+								<!-- Drag handle (visual) -->
+								<span class="shrink-0 cursor-grab text-[#2a2a3e] transition-colors hover:text-[#3a3a4e]"
+								      style="font-size: 11px; line-height: 1;">⠿</span>
+
+								<!-- Color swatch -->
+								<span
+									class="h-3 w-3 shrink-0 rounded-full"
+									style="background: {COLOR_HEX[area.color] ?? '#c084fc'}"
+								></span>
+
+								<!-- Emoji + label -->
+								<span class="font-mono text-sm">{area.emoji}</span>
+								<div class="flex-1 min-w-0">
+									<p class="font-mono text-xs text-[#e2e2e8]">{area.label}</p>
+									<p class="font-mono text-[9px] text-[#3a3a4e]">{area.key}</p>
+								</div>
+
+								<!-- Active badge -->
+								<span class="font-mono text-[9px] uppercase tracking-wider
+								             {area.suspended ? 'text-[#3a3a4e]' : 'text-green-400/70'}">
+									{area.suspended ? 'Suspended' : 'Active'}
 								</span>
-								<span class="flex-1 font-mono text-[10px] text-[#3a3a4e]">{area.key}</span>
 
-								<!-- Actions -->
-								<button
-									onclick={() => startEdit(area)}
-									class="font-mono text-[10px] text-[#6b6b7a] transition-colors hover:text-[#e2e2e8]"
-								>
-									Edit
-								</button>
-
-								<form method="POST" action="?/suspendArea" use:enhance>
+								<!-- Suspend/Unsuspend toggle -->
+								<form method="POST"
+								      action={area.suspended ? '?/unsuspendArea' : '?/suspendArea'}
+								      use:enhance>
 									<input type="hidden" name="id" value={area.id} />
-									<button type="submit" class="font-mono text-[10px] text-[#6b6b7a] transition-colors hover:text-yellow-400">
-										Suspend
+									<!-- Toggle switch -->
+									<button
+										type="submit"
+										class="relative h-4 w-7 rounded-full transition-colors
+										       {area.suspended ? 'bg-[#2a2a3e]' : 'bg-violet-500/40'}"
+										aria-label={area.suspended ? 'Activate' : 'Suspend'}
+									>
+										<span
+											class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all
+											       {area.suspended ? 'left-0.5' : 'left-3.5'}"
+										></span>
 									</button>
 								</form>
 
+								<!-- Edit -->
+								<button
+									onclick={() => startEdit(area)}
+									class="font-mono text-[10px] text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
+									aria-label="Edit area"
+								>
+									✎
+								</button>
+
+								<!-- Delete -->
 								<form
 									method="POST"
 									action="?/deleteArea"
@@ -230,8 +280,10 @@
 								>
 									<input type="hidden" name="id" value={area.id} />
 									<input type="hidden" name="key" value={area.key} />
-									<button type="submit" class="font-mono text-[10px] text-[#6b6b7a] transition-colors hover:text-red-400">
-										Delete
+									<button type="submit"
+									        class="font-mono text-[10px] text-[#3a3a4e] transition-colors hover:text-red-400"
+									        aria-label="Delete area">
+										✕
 									</button>
 								</form>
 							</div>
@@ -297,4 +349,113 @@
 			</ul>
 		</div>
 	{/if}
-</div>
+  {/snippet}
+
+  {#snippet panel()}
+    <!-- ── Default Schedule ── -->
+    <PanelCard title="Default Schedule">
+      <form
+        method="POST"
+        action="?/updateSchedule"
+        use:enhance
+        class="space-y-3"
+      >
+        <div>
+          <label class="mb-1 block font-mono text-[9px] uppercase tracking-[0.1em] text-[#6b6b7a]">
+            Workday Start
+          </label>
+          <input
+            type="time"
+            name="workdayStart"
+            bind:value={workdayStart}
+            onblur={(e) => e.currentTarget.form?.requestSubmit()}
+            class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
+                   font-mono text-sm text-[#e2e2e8] outline-none focus:border-violet-500/50"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block font-mono text-[9px] uppercase tracking-[0.1em] text-[#6b6b7a]">
+            Workday End
+          </label>
+          <input
+            type="time"
+            name="workdayEnd"
+            bind:value={workdayEnd}
+            onblur={(e) => e.currentTarget.form?.requestSubmit()}
+            class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-3 py-2
+                   font-mono text-sm text-[#e2e2e8] outline-none focus:border-violet-500/50"
+          />
+        </div>
+      </form>
+    </PanelCard>
+
+    <!-- ── Preferences ── -->
+    <PanelCard title="Preferences">
+      <form method="POST" action="?/updatePreferences" use:enhance class="space-y-3">
+        <input type="hidden" name="weekendThreshold" value={weekendThreshold} />
+        <input type="hidden" name="autoFocusMode" value={String(autoFocusMode)} />
+
+        <!-- Auto-Focus Mode toggle -->
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-xs text-[#c8c8d4]">Auto-Focus Mode</span>
+          <button
+            type="submit"
+            onclick={() => { autoFocusMode = !autoFocusMode; }}
+            class="relative h-4 w-7 rounded-full transition-colors
+                   {autoFocusMode ? 'bg-violet-500/60' : 'bg-[#2a2a3e]'}"
+          >
+            <span
+              class="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all
+                     {autoFocusMode ? 'left-3.5' : 'left-0.5'}"
+            ></span>
+          </button>
+        </div>
+
+        <!-- Weekend Threshold -->
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-xs text-[#6b6b7a]">Weekend Threshold</span>
+          <select
+            bind:value={weekendThreshold}
+            onchange={(e) => e.currentTarget.form?.requestSubmit()}
+            name="weekendThreshold"
+            class="rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1
+                   font-mono text-[10px] text-[#e2e2e8] outline-none"
+          >
+            <option value="12:00">Fri 12:00</option>
+            <option value="14:00">Fri 14:00</option>
+            <option value="16:00">Fri 16:00</option>
+            <option value="18:00">Fri 18:00</option>
+          </select>
+        </div>
+      </form>
+    </PanelCard>
+
+    <!-- ── Identity Logic ── -->
+    <PanelCard>
+      <div class="space-y-2">
+        <div class="flex items-center gap-1.5">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="text-[#3a3a4e]">
+            <circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M5 3V5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="5" cy="7" r="0.5" fill="currentColor"/>
+          </svg>
+          <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-[#3a3a4e]">
+            Identity Logic
+          </span>
+        </div>
+        <p class="font-mono text-[10px] leading-relaxed text-[#3a3a4e]">
+          Areas represent execution contexts for tasks and habits. Reordering them updates
+          the priority weight in the cognitive engine's task algorithm.
+        </p>
+        <div class="flex gap-1.5 pt-1">
+          <span class="rounded bg-[#1e1e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#3a3a4e]">
+            Context_v2.0
+          </span>
+          <span class="rounded bg-[#1e1e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#3a3a4e]">
+            Sync_Enabled
+          </span>
+        </div>
+      </div>
+    </PanelCard>
+  {/snippet}
+</TwoColumnPage>

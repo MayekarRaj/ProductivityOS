@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { areaFor as areaForHelper, colorClasses } from '$lib/constants/areas';
 	import { formatTimeIST } from '$lib/utils/dates';
+	import TwoColumnPage from '$lib/components/TwoColumnPage.svelte';
+	import PanelCard from '$lib/components/PanelCard.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -13,13 +16,53 @@
 	// Short day label for each column header: "Mon", "Tue", etc.
 	const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-	// Energy emoji map — same as Today view
-	const ENERGY_EMOJI: Record<string, string> = {
-		drained: '😴',
-		okay: '🙂',
-		charged: '⚡',
-		peak: '🔥'
+	// Energy dot color map for day cards
+	const ENERGY_DOT: Record<string, string> = {
+		drained: 'bg-slate-500',
+		okay:    'bg-yellow-400',
+		charged: 'bg-blue-400',
+		peak:    'bg-green-400'
 	};
+
+	const ENERGY_LABEL: Record<string, string> = {
+		drained: 'Low',
+		okay:    'Mid',
+		charged: 'High',
+		peak:    'Peak'
+	};
+
+	// Week navigation helpers
+	function getAdjacentMonday(currentMonday: string, offset: number): string {
+		const d = new Date(currentMonday + 'T00:00:00+05:30');
+		d.setDate(d.getDate() + offset * 7);
+		return d.toISOString().slice(0, 10);
+	}
+
+	function navToWeek(monday: string) {
+		goto(`?week=${monday}`);
+	}
+
+	// Derived: week-level efficiency metrics for the right panel
+	const totalPomodoros = $derived(
+		Object.values(data.dayMap).reduce((s, e) => s + (e.day?.pomodoroSessions ?? 0), 0)
+	);
+	const focusHours = $derived(Math.round(totalPomodoros * 25 / 60 * 10) / 10);
+
+	const totalTasks = $derived(
+		Object.values(data.dayMap).reduce((s, e) => s + e.tasks.length, 0)
+	);
+	const pendingTasks = $derived(
+		Object.values(data.dayMap).reduce((s, e) => s + e.tasks.filter(t => !t.done).length, 0)
+	);
+	const cognitiveLoad = $derived(
+		totalTasks > 0 ? Math.round((pendingTasks / totalTasks) * 100) : 0
+	);
+
+	// Quick log / braindump state
+	let quickLogText = $state('');
+	let braindumpText = $state('');
+	let showQuickLog = $state(false);
+	let showBraindump = $state(false);
 
 	function toggleExpand(date: string) {
 		expandedDate = expandedDate === date ? null : date;
@@ -49,13 +92,44 @@
 	let draftError = $state('');
 </script>
 
-<div class="space-y-8">
-	<!-- ── Header ──────────────────────────────────────────────────────────── -->
-	<div>
-		<p class="font-mono text-sm text-[#6b6b7a]">Week of</p>
-		<h1 class="font-display text-2xl font-bold text-[#e2e2e8]">
-			{shortDate(data.weekDates[0])} – {shortDate(data.weekDates[6])}
-		</h1>
+<TwoColumnPage>
+  {#snippet main()}
+	<!-- ── Header ── -->
+	<div class="flex items-start justify-between">
+	  <div>
+	    <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+	      Operational Cycle
+	    </p>
+	    <h1 class="font-display text-2xl font-bold text-[#e2e2e8]">
+	      {shortDate(data.weekDates[0])} — {shortDate(data.weekDates[6])}
+	    </h1>
+	  </div>
+	  <!-- Week navigation -->
+	  <div class="flex items-center gap-1">
+	    <button
+	      onclick={() => navToWeek(getAdjacentMonday(data.weekStartDate, -1))}
+	      class="flex h-7 w-7 items-center justify-center rounded font-mono text-sm
+	             text-[#6b6b7a] transition-colors hover:bg-[#1e1e2e] hover:text-[#e2e2e8]"
+	      aria-label="Previous week"
+	    >‹</button>
+	    {#if !data.isCurrentWeek}
+	      <button
+	        onclick={() => goto('/week')}
+	        class="rounded border border-[#2a2a3e] px-2.5 py-1 font-mono text-[10px]
+	               uppercase tracking-widest text-[#6b6b7a] transition-colors
+	               hover:border-violet-500/40 hover:text-violet-400"
+	      >Current</button>
+	    {:else}
+	      <span class="rounded border border-violet-500/30 px-2.5 py-1 font-mono text-[10px]
+	                   uppercase tracking-widest text-violet-400">Current</span>
+	    {/if}
+	    <button
+	      onclick={() => navToWeek(getAdjacentMonday(data.weekStartDate, 1))}
+	      class="flex h-7 w-7 items-center justify-center rounded font-mono text-sm
+	             text-[#6b6b7a] transition-colors hover:bg-[#1e1e2e] hover:text-[#e2e2e8]"
+	      aria-label="Next week"
+	    >›</button>
+	  </div>
 	</div>
 
 	<!-- ── 7-Day Grid ───────────────────────────────────────────────────────── -->
@@ -69,7 +143,6 @@
 				{@const entry = data.dayMap[date]}
 				{@const isToday = date === data.todayStr}
 				{@const area = areaFor(entry.day?.homeBase)}
-				{@const areaColors = area ? colorClasses(area.color) : null}
 				{@const pendingCount = entry.tasks.filter((t) => !t.done).length}
 				{@const doneCount = entry.tasks.filter((t) => t.done).length}
 				{@const isExpanded = expandedDate === date}
@@ -82,60 +155,37 @@
 						: 'border-[#1e1e2e] bg-[#161620] hover:border-[#2a2a3e]'}
 						{isExpanded ? 'ring-1 ring-white/10' : ''}"
 				>
-					<!-- Day name + date -->
-					<div>
-						<p
-							class="font-mono text-xs font-semibold {isToday
-								? 'text-[#e2e2e8]'
-								: 'text-[#6b6b7a]'}"
-						>
-							{DAY_LABELS[i]}
-						</p>
-						<p class="font-mono text-sm {isToday ? 'text-white' : 'text-[#e2e2e8]'}">
-							{shortDate(date)}
-						</p>
-						{#if isToday}
-							<span class="mt-0.5 inline-block font-mono text-[10px] text-[#6b6b7a]">today</span>
-						{/if}
+					<!-- Day abbrev top-left, area emoji top-right -->
+					<div class="flex items-start justify-between">
+					  <div>
+					    <p class="font-mono text-[10px] font-semibold uppercase text-[#6b6b7a]">{DAY_LABELS[i]}</p>
+					    <p class="font-mono text-lg font-bold leading-tight {isToday ? 'text-white' : 'text-[#e2e2e8]'}">
+					      {new Date(date + 'T00:00:00+05:30').getDate()}
+					    </p>
+					  </div>
+					  {#if area}
+					    <span class="text-base" title={area.label}>{area.emoji}</span>
+					  {/if}
 					</div>
 
-					<!-- Home base badge -->
-					{#if area}
-						<span
-							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px]
-								{areaColors?.bg} {areaColors?.text}"
-						>
-							{area.emoji}
-							{area.label}
-						</span>
+					<!-- Energy dot + label -->
+					{#if entry.day?.energy}
+					  <div class="flex items-center gap-1">
+					    <span class="h-1.5 w-1.5 rounded-full {ENERGY_DOT[entry.day.energy] ?? 'bg-[#3a3a4e]'}"></span>
+					    <span class="font-mono text-[9px] uppercase tracking-wide text-[#6b6b7a]">
+					      {ENERGY_LABEL[entry.day.energy] ?? ''}
+					    </span>
+					  </div>
 					{:else}
-						<span class="font-mono text-[10px] text-[#6b6b7a]">–</span>
+					  <div class="h-4"></div>
 					{/if}
 
-					<!-- Stats -->
-					<div class="flex flex-col gap-0.5">
-						{#if entry.tasks.length > 0}
-							<p class="font-mono text-[10px] text-[#6b6b7a]">
-								{#if pendingCount === 0}
-									✓ {doneCount} done
-								{:else}
-									{pendingCount} left
-									{#if doneCount > 0}/ {doneCount} done{/if}
-								{/if}
-							</p>
-						{/if}
-						{#if entry.day?.mvdDone}
-							<p class="font-mono text-[10px] text-green-400">MVD ✓</p>
-						{/if}
-						{#if entry.day?.energy}
-							<p class="font-mono text-[10px]">{ENERGY_EMOJI[entry.day.energy] ?? ''}</p>
-						{/if}
-						{#if entry.events.length > 0}
-							<p class="font-mono text-[10px] text-[#6b6b7a]">
-								{entry.events.length} event{entry.events.length > 1 ? 's' : ''}
-							</p>
-						{/if}
-					</div>
+					<!-- Task count -->
+					{#if entry.tasks.length > 0}
+					  <p class="font-mono text-[10px] text-[#6b6b7a]">
+					    {pendingCount > 0 ? `${pendingCount} left` : `✓ ${doneCount}`}
+					  </p>
+					{/if}
 				</button>
 			{/each}
 		</div>
@@ -219,35 +269,31 @@
 					{/if}
 				</div>
 
-				<!-- Events -->
+				<!-- Focus Schedule -->
 				<div>
-					<p
-						class="mb-2 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]"
-					>
-						Events
-					</p>
-					{#if entry.events.length === 0}
-						<p class="font-mono text-xs text-[#6b6b7a]">No events</p>
-					{:else}
-						<ul class="space-y-1.5">
-							{#each entry.events as event}
-								<li class="flex items-center gap-2">
-									<span class="font-mono text-[10px] tabular-nums text-[#6b6b7a]">
-										{formatTimeIST(event.startsAt)}
-									</span>
-									<span class="flex-1 font-mono text-xs text-[#e2e2e8]">{event.title}</span>
-									{#if event.area}
-										{@const ea = areaFor(event.area)}
-										{#if ea}
-											<span class="shrink-0 font-mono text-[10px] {colorClasses(ea.color).text}"
-												>{ea.emoji}</span
-											>
-										{/if}
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
+				  <p class="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b6b7a]">
+				    Focus Schedule
+				  </p>
+				  {#if entry.events.length === 0}
+				    <p class="font-mono text-xs text-[#3a3a4e]">No events</p>
+				  {:else}
+				    <ul class="space-y-1.5">
+				      {#each entry.events as event}
+				        {@const ea = event.area ? areaFor(event.area) : null}
+				        {@const eaColors = ea ? colorClasses(ea.color) : null}
+				        <li class="flex items-center gap-2.5 rounded-r-lg border-l-2 pl-3 py-1.5
+				                   {eaColors ? eaColors.border : 'border-[#3a3a4e]'}">
+				          <span class="font-mono text-[10px] tabular-nums text-[#6b6b7a]">
+				            {formatTimeIST(event.startsAt)}
+				          </span>
+				          <span class="flex-1 font-mono text-xs text-[#e2e2e8]">{event.title}</span>
+				          {#if ea}
+				            <span class="font-mono text-[9px] uppercase {eaColors?.text}">{ea.label}</span>
+				          {/if}
+				        </li>
+				      {/each}
+				    </ul>
+				  {/if}
 				</div>
 			</div>
 
@@ -380,4 +426,130 @@
 			</div>
 		</form>
 	</div>
-</div>
+  {/snippet}
+
+  {#snippet panel()}
+    <!-- ── Efficiency Metrics ── -->
+    <PanelCard title="Efficiency Metrics">
+      <div class="space-y-3">
+        <!-- Cognitive Load -->
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-xs text-[#6b6b7a]">Cognitive Load</span>
+            <span class="font-mono text-sm font-semibold text-[#e2e2e8]">{cognitiveLoad}%</span>
+          </div>
+          <div class="mt-1.5 h-1 w-full rounded-full bg-[#1e1e2e]">
+            <div
+              class="h-full rounded-full transition-all
+                     {cognitiveLoad > 75 ? 'bg-red-400' : cognitiveLoad > 40 ? 'bg-yellow-400' : 'bg-green-400'}"
+              style="width: {cognitiveLoad}%"
+            ></div>
+          </div>
+        </div>
+        <!-- Focus Time -->
+        <div class="flex items-center justify-between rounded-lg bg-[#0c0c0f] px-3 py-2">
+          <span class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">Focus Time</span>
+          <span class="font-mono text-sm font-bold text-[#e2e2e8]">{focusHours}h</span>
+        </div>
+        <!-- Pending Tasks -->
+        <div class="flex items-center justify-between rounded-lg bg-[#0c0c0f] px-3 py-2">
+          <span class="font-mono text-[10px] uppercase tracking-wider text-[#6b6b7a]">Pending Tasks</span>
+          <span class="font-mono text-sm font-bold text-[#e2e2e8]">{pendingTasks}</span>
+        </div>
+      </div>
+    </PanelCard>
+
+    <!-- ── Quick Log ── -->
+    <PanelCard>
+      {#if !showQuickLog}
+        <button
+          onclick={() => (showQuickLog = true)}
+          class="flex w-full items-center gap-2 font-mono text-xs text-[#6b6b7a]
+                 transition-colors hover:text-[#e2e2e8]"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M6 2V10M2 6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Quick Log
+        </button>
+      {:else}
+        <form
+          method="POST"
+          action="?/addInboxItem"
+          use:enhance={() => {
+            return async ({ update }) => {
+              await update();
+              quickLogText = '';
+              showQuickLog = false;
+            };
+          }}
+          class="flex items-center gap-2"
+        >
+          <input
+            bind:value={quickLogText}
+            name="text"
+            placeholder="Log something..."
+            autofocus
+            class="flex-1 bg-transparent font-mono text-xs text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
+          />
+          <button type="submit" class="font-mono text-[10px] text-violet-400 hover:text-violet-300">↵</button>
+          <button type="button" onclick={() => (showQuickLog = false)}
+                  class="font-mono text-[10px] text-[#3a3a4e] hover:text-[#6b6b7a]">✕</button>
+        </form>
+      {/if}
+    </PanelCard>
+
+    <!-- ── Braindump ── -->
+    <PanelCard>
+      {#if !showBraindump}
+        <button
+          onclick={() => (showBraindump = true)}
+          class="flex w-full items-center gap-2 font-mono text-xs text-[#6b6b7a]
+                 transition-colors hover:text-[#e2e2e8]"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M4 6C4 6 4.5 8 6 8C7.5 8 8 6 8 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="4.5" cy="4.5" r="0.5" fill="currentColor"/>
+            <circle cx="7.5" cy="4.5" r="0.5" fill="currentColor"/>
+          </svg>
+          Braindump
+        </button>
+      {:else}
+        <form
+          method="POST"
+          action="?/addInboxItem"
+          use:enhance={() => {
+            return async ({ update }) => {
+              await update();
+              braindumpText = '';
+              showBraindump = false;
+            };
+          }}
+          class="flex items-center gap-2"
+        >
+          <input
+            bind:value={braindumpText}
+            name="text"
+            placeholder="What's on your mind..."
+            autofocus
+            class="flex-1 bg-transparent font-mono text-xs text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
+          />
+          <button type="submit" class="font-mono text-[10px] text-violet-400 hover:text-violet-300">↵</button>
+          <button type="button" onclick={() => (showBraindump = false)}
+                  class="font-mono text-[10px] text-[#3a3a4e] hover:text-[#6b6b7a]">✕</button>
+        </form>
+      {/if}
+    </PanelCard>
+
+    <!-- ── System Note (placeholder — AI endpoint skipped for now) ── -->
+    <PanelCard>
+      <div class="flex items-start gap-2">
+        <span class="font-mono text-[10px] text-[#3a3a4e]">≡</span>
+        <p class="font-mono text-xs italic leading-relaxed text-[#3a3a4e]">
+          System note will appear here once the week has data.
+        </p>
+      </div>
+    </PanelCard>
+  {/snippet}
+</TwoColumnPage>

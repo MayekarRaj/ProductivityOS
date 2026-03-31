@@ -125,18 +125,30 @@ export async function generateDailyBriefing(context: {
 	pendingTasks: string[];
 	events: Array<{ title: string; time: string }>;
 	todayStr: string;
+	areaKeys?: string[];
 }): Promise<{ briefing: string; suggestions: string[] }> {
+	const areaKeysLine = context.areaKeys && context.areaKeys.length > 0
+		? `Available area keys: ${context.areaKeys.join(', ')}`
+		: '';
+
 	const systemPrompt = `You are a personal productivity coach for a builder managing multiple projects (startup, freelance clients, fitness, personal growth).
 Generate a short daily briefing and task suggestions.
 Respond ONLY with JSON: {"briefing": string, "suggestions": string[]}
-- briefing: 2-3 sentences. Practical, specific to the data. Reference real tasks/events if present.
-- suggestions: exactly 2-3 short action phrases tailored to the home base area. No fluff.`;
+- briefing: 2-4 sentences. Practical, specific to the data. Reference real tasks/events if present.
+- suggestions: exactly 2-3 short action phrases tailored to the home base area. No fluff.
+
+Format your response using these inline markers:
+- Wrap key metrics, numbers, and time references in [hl]...[/hl] (e.g. [hl]3 deep work blocks[/hl], [hl]10 AM[/hl])
+- Wrap area/project references in [area:KEY]...[/area] where KEY is the area slug (e.g. [area:getfly]Getfly refactor[/area])
+Available area keys will be listed below.
+Keep the briefing to 2-4 sentences. Be specific and actionable.`;
 
 	const userMsg = `Date: ${context.todayStr}
 Home base: ${context.homeBaseLabel} (${context.homeBase})
 Energy: ${context.energy ?? 'not set'}
 Pending tasks (${context.pendingTasks.length}): ${context.pendingTasks.slice(0, 6).join(' | ') || 'none'}
-Events: ${context.events.map((e) => `${e.title} at ${e.time}`).join(', ') || 'none'}`;
+Events: ${context.events.map((e) => `${e.title} at ${e.time}`).join(', ') || 'none'}
+${areaKeysLine}`;
 
 	const raw = await callGroq(systemPrompt, userMsg);
 	const parsed = JSON.parse(raw);

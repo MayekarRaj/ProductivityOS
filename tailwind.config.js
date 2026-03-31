@@ -11,6 +11,10 @@ export default {
 			fontFamily: {
 				mono: ['DM Mono', 'Courier New', 'monospace'],
 				display: ['Space Grotesk', 'sans-serif']
+			},
+			colors: {
+				accent: '#8B5CF6',
+				'accent-hover': '#7C3AED'
 			}
 		}
 	},

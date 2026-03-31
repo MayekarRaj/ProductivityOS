@@ -42,7 +42,8 @@ export const GET: RequestHandler = async () => {
 		energy: day.energy,
 		pendingTasks: pendingTasks.map((t) => t.text),
 		events: todayEvents.map((e) => ({ title: e.title, time: formatTimeIST(e.startsAt) })),
-		todayStr
+		todayStr,
+		areaKeys: userAreas.map((a) => a.key)
 	});
 
 	return json(result);

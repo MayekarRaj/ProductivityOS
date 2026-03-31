@@ -60,7 +60,12 @@ export const users = pgTable('users', {
 	// Telegram chat ID — set when user links their Telegram account via /start
 	telegramChatId: text('telegram_chat_id').unique(),
 	timezone: text('timezone').notNull().default('Asia/Kolkata'),
-	createdAt: timestamptz('created_at').notNull().defaultNow()
+	createdAt: timestamptz('created_at').notNull().defaultNow(),
+	workdayStart: text('workday_start').notNull().default('09:00'),
+	workdayEnd: text('workday_end').notNull().default('18:00'),
+	autoFocusMode: boolean('auto_focus_mode').notNull().default(false),
+	weekendThreshold: text('weekend_threshold').notNull().default('14:00'),
+	currentFocus: text('current_focus').notNull().default('')
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +115,9 @@ export const tasks = pgTable('tasks', {
 	// source tracks where the task came from — useful for Telegram/AI analytics
 	source: text('source').notNull().default('web'), // 'web' | 'telegram' | 'ai'
 	createdAt: timestamptz('created_at').notNull().defaultNow(),
-	completedAt: timestamptz('completed_at') // set when done flips to true
+	completedAt: timestamptz('completed_at'), // set when done flips to true
+	estimatedMinutes: integer('estimated_minutes'),
+	priority: text('priority') // 'normal' | 'urgent' | null
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

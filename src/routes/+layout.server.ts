@@ -9,6 +9,9 @@ export const load: LayoutServerLoad = async () => {
 	// Ensure the default user exists on every request (no-op if already there)
 	await db.insert(users).values({ id: DEFAULT_USER_ID, timezone: 'Asia/Kolkata' }).onConflictDoNothing();
 
+	// Fetch the user row so all pages have access to preferences (workdayStart, currentFocus, etc.)
+	const [user] = await db.select().from(users).where(eq(users.id, DEFAULT_USER_ID));
+
 	// Load all areas (active + suspended) for this user
 	let areaRows = await db
 		.select()
@@ -24,6 +27,6 @@ export const load: LayoutServerLoad = async () => {
 			.returning();
 	}
 
-	// Return areas to all child pages — every page gets data.areas automatically
-	return { areas: areaRows };
+	// Return user and areas to all child pages — every page gets data.user and data.areas automatically
+	return { user, areas: areaRows };
 };
