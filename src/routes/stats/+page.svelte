@@ -286,6 +286,73 @@
 			</ul>
 		{/if}
 	</div>
+	<!-- ── Sleep Patterns ───────────────────────────────────────────────────── -->
+	<!--
+		Bar chart: one bar per day showing hours slept.
+		Color: red < 6h, amber 6–7h, green ≥ 7h.
+		Only rendered if at least one day has sleep logged.
+	-->
+	{#if stats.sleepStats.some((s) => s.hours !== null)}
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
+			<div class="mb-1 flex items-center justify-between">
+				<p class="font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
+					Sleep Patterns
+				</p>
+				{#if stats.avgSleepHours !== null}
+					<span class="font-mono text-[10px]
+						{stats.avgSleepHours >= 7.5 ? 'text-green-400' : stats.avgSleepHours >= 6 ? 'text-amber-400' : 'text-red-400'}">
+						avg {stats.avgSleepHours}h
+					</span>
+				{/if}
+			</div>
+			<p class="mb-4 font-mono text-[10px] text-[#3a3a4e]">
+				<span class="text-green-400">■</span> ≥7h &nbsp;
+				<span class="text-amber-400">■</span> 6–7h &nbsp;
+				<span class="text-red-400">■</span> &lt;6h
+			</p>
+
+			<!-- Bar chart: each bar represents one day -->
+			<div class="flex items-end gap-1" style="height: 64px">
+				{#each stats.sleepStats as day}
+					{@const maxH = 10} <!-- cap at 10h for visual scaling -->
+					{@const pct = day.hours !== null ? Math.min(day.hours / maxH, 1) * 100 : 0}
+					{@const barColor =
+						day.hours === null
+							? 'bg-[#1e1e2e]'
+							: day.hours < 6
+								? 'bg-red-500/70'
+								: day.hours < 7
+									? 'bg-amber-500/70'
+									: 'bg-green-500/70'}
+					<div class="flex flex-1 flex-col items-center gap-1">
+						<!-- Hour label on top of bar -->
+						<span class="font-mono text-[9px] text-[#3a3a4e]">
+							{day.hours !== null ? day.hours : ''}
+						</span>
+						<!-- Bar track -->
+						<div class="relative w-full flex-1 rounded-t">
+							<div
+								class="absolute bottom-0 w-full rounded-t transition-all {barColor}"
+								style="height: {pct}%"
+							></div>
+						</div>
+					</div>
+				{/each}
+			</div>
+
+			<!-- Day labels -->
+			<div class="mt-1 flex gap-1">
+				{#each stats.sleepStats as day}
+					<span class="flex-1 text-center font-mono text-[9px] text-[#3a3a4e]">{day.weekday}</span>
+				{/each}
+			</div>
+
+			<!-- Reference line label -->
+			<p class="mt-2 font-mono text-[10px] text-[#3a3a4e]">
+				8h optimal · logged {stats.sleepStats.filter((s) => s.hours !== null).length}/7 days
+			</p>
+		</div>
+	{/if}
   {/snippet}
 
   {#snippet panel()}

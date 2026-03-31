@@ -35,6 +35,12 @@ export type HabitConsistency = {
 	percent: number; // 0–100
 };
 
+export type SleepStat = {
+	date: string;
+	weekday: string;
+	hours: number | null; // null = not logged
+};
+
 export type WeekStats = {
 	// Summary cards
 	tasksDoneTotal: number;
@@ -45,6 +51,8 @@ export type WeekStats = {
 	dayStats: DayStat[]; // 7 entries, Mon–Sun
 	areaStats: AreaStat[]; // one per area that has tasks
 	habitConsistency: HabitConsistency[]; // sorted worst → best
+	sleepStats: SleepStat[]; // 7 entries, Mon–Sun (hours slept each night)
+	avgSleepHours: number | null; // average over logged days (null if none logged)
 	// Weekly wins
 	wins: string[];
 };
@@ -64,6 +72,8 @@ export function computeWeekStats(
 		energy: string | null;
 		mvdDone: boolean;
 		pomodoroSessions: number;
+		sleepStart: Date | null;
+		sleepEnd: Date | null;
 	}>,
 	taskRows: Array<{ dayId: string; area: string | null; done: boolean }>,
 	habitRows: Array<{ id: string; name: string; area: string; frequency: string; customDays: string[] | null }>,
@@ -145,6 +155,27 @@ export function computeWeekStats(
 		};
 	}).sort((a, b) => a.percent - b.percent); // worst first
 
+	// ── Sleep stats ───────────────────────────────────────────────────────────
+	// sleepStart/sleepEnd are timestamptz — duration = (sleepEnd - sleepStart) in hours.
+	// Each day row holds the sleep for that MORNING (e.g. Monday row = Sunday night → Monday wake).
+	const sleepStats: SleepStat[] = weekDates.map((date) => {
+		const day = dayByDate.get(date);
+		let hours: number | null = null;
+		if (day?.sleepStart && day?.sleepEnd) {
+			const ms = (day.sleepEnd as Date).getTime() - (day.sleepStart as Date).getTime();
+			// Round to 1 decimal place
+			hours = Math.round((ms / (1000 * 60 * 60)) * 10) / 10;
+			if (hours < 0) hours = null; // guard against bad data
+		}
+		return { date, weekday: weekdayOf(date), hours };
+	});
+
+	const loggedSleepDays = sleepStats.filter((s) => s.hours !== null);
+	const avgSleepHours =
+		loggedSleepDays.length > 0
+			? Math.round((loggedSleepDays.reduce((s, d) => s + d.hours!, 0) / loggedSleepDays.length) * 10) / 10
+			: null;
+
 	// ── Weekly wins ───────────────────────────────────────────────────────────
 	// Text snippets auto-generated from the data — no AI, just simple rules.
 	const wins: string[] = [];
@@ -171,8 +202,12 @@ export function computeWeekStats(
 	if (maxMvdStreak >= 3) {
 		wins.push(`${maxMvdStreak}-day MVD streak!`);
 	}
+	// Sleep win — averaged ≥ 7.5h
+	if (avgSleepHours !== null && avgSleepHours >= 7.5) {
+		wins.push(`Averaged ${avgSleepHours}h sleep — well rested week`);
+	}
 
-	return { tasksDoneTotal, mvdDays, habitsCompleted, pomodorosTotal, dayStats, areaStats, habitConsistency, wins };
+	return { tasksDoneTotal, mvdDays, habitsCompleted, pomodorosTotal, dayStats, areaStats, habitConsistency, sleepStats, avgSleepHours, wins };
 }
 
 // Helper: longest run of `true` values in an array

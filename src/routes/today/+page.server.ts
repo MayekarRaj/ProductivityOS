@@ -7,12 +7,12 @@
 
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 
 import { db } from '$lib/db';
 import { days, tasks, events, inboxItems } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
-import { getTodayDateIST, getWeekdayIST, istInputToUTC } from '$lib/utils/dates';
+import { getTodayDateIST, getWeekdayIST, istInputToUTC, getYesterdayDateIST } from '$lib/utils/dates';
 import { DEFAULT_SCHEDULE } from '$lib/constants/defaults';
 import { parseMessage } from '$lib/server/ai';
 
@@ -41,10 +41,17 @@ export const load: PageServerLoad = async () => {
 			.returning(); // .returning() gives us the freshly inserted row with DB defaults
 	}
 
-	// ── Fetch tasks, events, and inbox in parallel ────────────────────────────
-	// Promise.all fires all three queries simultaneously — faster than sequential awaits.
-	// isNull(inboxItems.convertedToTaskId) = only show items not yet converted to tasks
-	const [todayTasks, todayEvents, todayInbox] = await Promise.all([
+	// ── Fetch tasks, events, inbox, and carry-forward in parallel ────────────
+	// Promise.all fires all queries simultaneously — faster than sequential awaits.
+	const yesterdayStr = getYesterdayDateIST();
+
+	// Find yesterday's day row (may not exist if the app wasn't opened yesterday)
+	const [yesterdayDay] = await db
+		.select()
+		.from(days)
+		.where(and(eq(days.userId, DEFAULT_USER_ID), eq(days.date, yesterdayStr)));
+
+	const [todayTasks, todayEvents, todayInbox, carriedTasks] = await Promise.all([
 		db
 			.select()
 			.from(tasks)
@@ -65,10 +72,25 @@ export const load: PageServerLoad = async () => {
 					isNull(inboxItems.convertedToTaskId) // hide converted items
 				)
 			)
-			.orderBy(inboxItems.createdAt)
+			.orderBy(inboxItems.createdAt),
+
+		// Yesterday's incomplete tasks — shown as carry-forward suggestions
+		// Only fetched if yesterday's day row exists
+		yesterdayDay
+			? db
+					.select()
+					.from(tasks)
+					.where(
+						and(
+							eq(tasks.dayId, yesterdayDay.id),
+							eq(tasks.done, false) // only pending tasks
+						)
+					)
+					.orderBy(tasks.createdAt)
+			: Promise.resolve([])
 	]);
 
-	return { day, tasks: todayTasks, events: todayEvents, inboxItems: todayInbox };
+	return { day, tasks: todayTasks, events: todayEvents, inboxItems: todayInbox, carriedTasks };
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -232,6 +254,74 @@ export const actions: Actions = {
 			.update(inboxItems)
 			.set({ convertedToTaskId: newTask.id })
 			.where(eq(inboxItems.id, itemId));
+	},
+
+	// ── Carry Forward ────────────────────────────────────────────────────────
+	// Moves an incomplete task from yesterday's day to today's day.
+	// We just update day_id — the task itself (text, area, source) stays unchanged.
+	carryForward: async ({ request }) => {
+		const data = await request.formData();
+		const taskId = data.get('taskId') as string;
+		const todayDayId = data.get('todayDayId') as string;
+
+		await db.update(tasks).set({ dayId: todayDayId }).where(eq(tasks.id, taskId));
+	},
+
+	// Moves ALL incomplete tasks from yesterday to today in one shot.
+	// Accepts multiple taskId fields + a single todayDayId.
+	carryAll: async ({ request }) => {
+		const data = await request.formData();
+		const taskIds = data.getAll('taskId') as string[];
+		const todayDayId = data.get('todayDayId') as string;
+		if (taskIds.length === 0) return;
+		await db.update(tasks).set({ dayId: todayDayId }).where(inArray(tasks.id, taskIds));
+	},
+
+	// Dismisses a carry-forward task (permanently deletes it).
+	// The user explicitly chose not to carry it forward.
+	dismissCarried: async ({ request }) => {
+		const data = await request.formData();
+		const taskId = data.get('taskId') as string;
+		// Clear any inbox item FK before deleting (same pattern as deleteTask)
+		await db
+			.update(inboxItems)
+			.set({ convertedToTaskId: null })
+			.where(eq(inboxItems.convertedToTaskId, taskId));
+		await db.delete(tasks).where(eq(tasks.id, taskId));
+	},
+
+	// ── Sleep Logging ─────────────────────────────────────────────────────────
+	// Accepts two time strings (HH:MM) from the right panel:
+	//   bedTime  — time the user went to bed (treated as the PREVIOUS calendar day)
+	//   wakeTime — time the user woke up (treated as TODAY)
+	//
+	// Sleep spans midnight, so we need to assemble two full IST timestamps:
+	//   sleepStart = yesterday's date + bedTime  (e.g. 2025-03-05T23:30+05:30)
+	//   sleepEnd   = today's date    + wakeTime  (e.g. 2025-03-06T07:00+05:30)
+	logSleep: async ({ request }) => {
+		const data = await request.formData();
+		const dayId = data.get('dayId') as string;
+		const bedTime = (data.get('bedTime') as string)?.trim();   // "23:30" or ""
+		const wakeTime = (data.get('wakeTime') as string)?.trim(); // "07:00" or ""
+
+		// Both fields must be provided together — partial input is ignored
+		if (!bedTime || !wakeTime) {
+			// If both are empty, clear the sleep fields (user wiped them out)
+			if (!bedTime && !wakeTime) {
+				await db.update(days).set({ sleepStart: null, sleepEnd: null }).where(eq(days.id, dayId));
+			}
+			return;
+		}
+
+		const todayStr = getTodayDateIST();
+		const yesterdayStr = getYesterdayDateIST();
+
+		// Bed time is on yesterday's calendar date — append IST offset
+		const sleepStart = new Date(`${yesterdayStr}T${bedTime}:00+05:30`);
+		// Wake time is on today's calendar date
+		const sleepEnd = new Date(`${todayStr}T${wakeTime}:00+05:30`);
+
+		await db.update(days).set({ sleepStart, sleepEnd }).where(eq(days.id, dayId));
 	},
 
 	// ── 9.5: Natural language task/event input ──────────────────────────────

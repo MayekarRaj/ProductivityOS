@@ -145,6 +145,22 @@ export function getWeekDatesIST(): string[] {
 }
 
 /**
+ * Returns yesterday's date as YYYY-MM-DD in IST.
+ * Used by carry-forward: find incomplete tasks from the previous calendar day.
+ */
+export function getYesterdayDateIST(): string {
+	const todayStr = getTodayDateIST();
+	const today = new Date(todayStr + 'T00:00:00+05:30');
+	const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+	return new Intl.DateTimeFormat('en-CA', {
+		timeZone: IST_TIMEZONE,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(yesterday);
+}
+
+/**
  * Returns a greeting based on IST hour.
  * "Good morning" / "Good afternoon" / "Good evening" / "Good night"
  */

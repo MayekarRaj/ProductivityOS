@@ -36,6 +36,23 @@
 	let newEventArea = $state(untrack(() => data.day.homeBase));
 	let newEventRemindOffset = $state('5'); // minutes before start
 
+	// ── Sleep state ───────────────────────────────────────────────────────────
+	// Pre-populated from DB if sleep was logged previously (converts UTC → IST HH:MM)
+	let bedTime = $state(data.day.sleepStart ? formatTimeIST(data.day.sleepStart) : '');
+	let wakeTime = $state(data.day.sleepEnd ? formatTimeIST(data.day.sleepEnd) : '');
+
+	// Derived sleep duration for display (bed is "yesterday", wake is "today")
+	const sleepDuration = $derived(() => {
+		if (!bedTime || !wakeTime) return null;
+		const [bedH, bedM] = bedTime.split(':').map(Number);
+		const [wakeH, wakeM] = wakeTime.split(':').map(Number);
+		const bedMins = bedH * 60 + bedM;
+		const wakeMins = wakeH * 60 + wakeM;
+		// Sleep crosses midnight, so add 24h worth of minutes to wake
+		const durationMins = (wakeMins + 24 * 60 - bedMins) % (24 * 60);
+		return { hours: Math.floor(durationMins / 60), mins: durationMins % 60 };
+	});
+
 	// ── AI state (9.1, 9.5) ───────────────────────────────────────────────────
 	let nlInput = $state('');
 	let nlResult = $state('');
@@ -404,6 +421,83 @@
 		{/if}
 	</div>
 
+	<!-- ── Carry Forward ────────────────────────────────────────────────────── -->
+	<!--
+		Shows yesterday's incomplete tasks as suggestions.
+		User can move them to today (carryForward) or dismiss them (dismissCarried).
+		Hidden when there's nothing to carry forward.
+	-->
+	{#if data.carriedTasks.length > 0}
+		<div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+			<!-- Header -->
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<!-- Clock icon -->
+					<svg width="11" height="11" viewBox="0 0 11 11" fill="none" class="text-amber-400/70">
+						<circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.2"/>
+						<path d="M5.5 3V5.5L7 6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+					</svg>
+					<span class="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-400/70">
+						From Yesterday ({data.carriedTasks.length})
+					</span>
+				</div>
+
+				<!-- Carry all button -->
+				<form method="POST" action="?/carryAll" use:enhance>
+					<input type="hidden" name="todayDayId" value={data.day.id} />
+					{#each data.carriedTasks as task}
+						<input type="hidden" name="taskId" value={task.id} />
+					{/each}
+					<button
+						type="submit"
+						class="font-mono text-[10px] text-amber-400/60 transition-colors hover:text-amber-400"
+					>
+						Move all →
+					</button>
+				</form>
+			</div>
+
+			<!-- Per-task rows -->
+			{#each data.carriedTasks as task}
+				{@const taskArea = task.area ? areaFor(task.area, data.areas) : null}
+				{@const taskColors = taskArea ? colorClasses(taskArea.color) : null}
+				<div class="flex items-center gap-2 rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2.5 py-2">
+					<!-- Task text -->
+					<span class="flex-1 font-mono text-xs text-[#c8c8d4]">{task.text}</span>
+					<!-- Area badge -->
+					{#if taskArea && taskColors}
+						<span class="shrink-0 font-mono text-[9px] uppercase tracking-wider {taskColors.text}">
+							{taskArea.label}
+						</span>
+					{/if}
+					<!-- Carry forward -->
+					<form method="POST" action="?/carryForward" use:enhance class="shrink-0">
+						<input type="hidden" name="taskId" value={task.id} />
+						<input type="hidden" name="todayDayId" value={data.day.id} />
+						<button
+							type="submit"
+							title="Move to today"
+							class="font-mono text-[10px] text-[#6b6b7a] transition-colors hover:text-amber-400"
+						>
+							→ Today
+						</button>
+					</form>
+					<!-- Dismiss -->
+					<form method="POST" action="?/dismissCarried" use:enhance class="shrink-0">
+						<input type="hidden" name="taskId" value={task.id} />
+						<button
+							type="submit"
+							title="Dismiss"
+							class="font-mono text-[10px] text-[#3a3a4e] transition-colors hover:text-red-400"
+						>
+							✕
+						</button>
+					</form>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- ── Active Tasks ─────────────────────────────────────────────────────── -->
 	<div class="space-y-1">
 		<!-- Header row -->
@@ -697,6 +791,75 @@
           class="min-h-[80px] w-full resize-none bg-transparent font-mono text-xs
                  leading-relaxed text-[#c8c8d4] placeholder-[#3a3a4e] outline-none"
         >{data.day.note}</textarea>
+      </form>
+    </PanelCard>
+
+    <!-- ── Sleep Logging ─────────────────────────────────────────────────────── -->
+    <!--
+      Two time inputs: bed time (treated as yesterday) + wake time (today).
+      Autosaves on blur — same pattern as Daily Note.
+      Duration is computed client-side for instant feedback; the form persists to DB.
+    -->
+    <PanelCard title="Sleep">
+      <form
+        method="POST"
+        action="?/logSleep"
+        use:enhance
+        class="space-y-3"
+      >
+        <input type="hidden" name="dayId" value={data.day.id} />
+
+        <div class="grid grid-cols-2 gap-2">
+          <!-- Bed time — the night before -->
+          <div class="space-y-1">
+            <label for="bedTime" class="font-mono text-[9px] uppercase tracking-wider text-[#3a3a4e]">
+              Went to bed
+            </label>
+            <input
+              id="bedTime"
+              type="time"
+              name="bedTime"
+              bind:value={bedTime}
+              onblur={(e) => e.currentTarget.form?.requestSubmit()}
+              class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1.5
+                     font-mono text-xs text-[#e2e2e8] outline-none
+                     focus:border-[#2a2a3e] [color-scheme:dark]"
+            />
+          </div>
+
+          <!-- Wake time — this morning -->
+          <div class="space-y-1">
+            <label for="wakeTime" class="font-mono text-[9px] uppercase tracking-wider text-[#3a3a4e]">
+              Woke up
+            </label>
+            <input
+              id="wakeTime"
+              type="time"
+              name="wakeTime"
+              bind:value={wakeTime}
+              onblur={(e) => e.currentTarget.form?.requestSubmit()}
+              class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1.5
+                     font-mono text-xs text-[#e2e2e8] outline-none
+                     focus:border-[#2a2a3e] [color-scheme:dark]"
+            />
+          </div>
+        </div>
+
+        <!-- Sleep duration — shown once both fields are filled -->
+        {#if sleepDuration()}
+          {@const d = sleepDuration()!}
+          {@const color = d.hours < 6 ? 'text-red-400' : d.hours < 7 ? 'text-amber-400' : 'text-green-400'}
+          <p class="font-mono text-xs {color}">
+            {d.hours}h {d.mins > 0 ? `${d.mins}m` : ''} sleep
+            {#if d.hours < 6}
+              · under 6h impacts focus
+            {:else if d.hours >= 8}
+              · optimal
+            {/if}
+          </p>
+        {:else}
+          <p class="font-mono text-[10px] text-[#3a3a4e]">Log sleep to see patterns in Stats</p>
+        {/if}
       </form>
     </PanelCard>
   {/snippet}
