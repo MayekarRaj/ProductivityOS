@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { eq, and, inArray, gte } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { days, tasks, habits, habitLogs, areas, users } from '$lib/db/schema';
+import { days, tasks, habits, habitLogs, areas, users, pomodoroLogs } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekDatesIST, getMondayOfWeekIST } from '$lib/utils/dates';
 import { computeWeekStats } from '$lib/utils/stats';
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async () => {
 
 	const dayIds = weekDayRows.map((d) => d.id);
 
-	const [weekTasks, activeHabits, weekHabitLogs, userAreas] = await Promise.all([
+	const [weekTasks, activeHabits, weekHabitLogs, userAreas, weekPomodoroLogs] = await Promise.all([
 		dayIds.length > 0
 			? db.select().from(tasks).where(inArray(tasks.dayId, dayIds))
 			: Promise.resolve([]),
@@ -38,10 +38,15 @@ export const load: PageServerLoad = async () => {
 			.select()
 			.from(areas)
 			.where(eq(areas.userId, DEFAULT_USER_ID))
-			.orderBy(areas.sortOrder, areas.createdAt)
+			.orderBy(areas.sortOrder, areas.createdAt),
+
+		// Pomodoro logs for this week — used for focus-by-area breakdown
+		dayIds.length > 0
+			? db.select({ taskId: pomodoroLogs.taskId }).from(pomodoroLogs).where(inArray(pomodoroLogs.dayId, dayIds))
+			: Promise.resolve([])
 	]);
 
-	const stats = computeWeekStats(weekDates, weekDayRows, weekTasks, activeHabits, weekHabitLogs, userAreas);
+	const stats = computeWeekStats(weekDates, weekDayRows, weekTasks, activeHabits, weekHabitLogs, userAreas, weekPomodoroLogs);
 
 	// ── Prev-week comparison ──────────────────────────────────────────────────
 	const prevWeekDates = weekDates.map((d) => {

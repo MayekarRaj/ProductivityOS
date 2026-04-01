@@ -10,11 +10,12 @@ import { fail } from '@sveltejs/kit';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
 
 import { db } from '$lib/db';
-import { days, tasks, events, inboxItems } from '$lib/db/schema';
+import { days, tasks, events, inboxItems, recurringEvents, pomodoroLogs } from '$lib/db/schema';
 import { DEFAULT_USER_ID } from '$lib/constants/user';
 import { getTodayDateIST, getWeekdayIST, istInputToUTC, getYesterdayDateIST } from '$lib/utils/dates';
 import { DEFAULT_SCHEDULE } from '$lib/constants/defaults';
 import { parseMessage } from '$lib/server/ai';
+import { ensureRecurringInstances } from '$lib/utils/recurring';
 
 // ─── Load ────────────────────────────────────────────────────────────────────
 // Called by SvelteKit before rendering the page.
@@ -41,6 +42,10 @@ export const load: PageServerLoad = async () => {
 			.returning(); // .returning() gives us the freshly inserted row with DB defaults
 	}
 
+	// ── Create recurring event instances for today (if not already done) ─────
+	// Idempotent — checks before inserting, safe to run on every page load.
+	await ensureRecurringInstances(DEFAULT_USER_ID, todayStr, day.id, weekday);
+
 	// ── Fetch tasks, events, inbox, and carry-forward in parallel ────────────
 	// Promise.all fires all queries simultaneously — faster than sequential awaits.
 	const yesterdayStr = getYesterdayDateIST();
@@ -51,7 +56,7 @@ export const load: PageServerLoad = async () => {
 		.from(days)
 		.where(and(eq(days.userId, DEFAULT_USER_ID), eq(days.date, yesterdayStr)));
 
-	const [todayTasks, todayEvents, todayInbox, carriedTasks] = await Promise.all([
+	const [todayTasks, todayEvents, todayInbox, carriedTasks, recurringTemplates] = await Promise.all([
 		db
 			.select()
 			.from(tasks)
@@ -87,10 +92,17 @@ export const load: PageServerLoad = async () => {
 						)
 					)
 					.orderBy(tasks.createdAt)
-			: Promise.resolve([])
+			: Promise.resolve([]),
+
+		// Recurring event templates — needed by the "Manage Recurring" UI section
+		db
+			.select()
+			.from(recurringEvents)
+			.where(and(eq(recurringEvents.userId, DEFAULT_USER_ID), eq(recurringEvents.active, true)))
+			.orderBy(recurringEvents.createdAt)
 	]);
 
-	return { day, tasks: todayTasks, events: todayEvents, inboxItems: todayInbox, carriedTasks };
+	return { day, tasks: todayTasks, events: todayEvents, inboxItems: todayInbox, carriedTasks, recurringTemplates };
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -174,7 +186,18 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const dayId = data.get('dayId') as string;
 		const current = parseInt((data.get('current') as string) ?? '0');
-		await db.update(days).set({ pomodoroSessions: current + 1 }).where(eq(days.id, dayId));
+		// Optional — null means "no specific task linked"
+		const taskId = (data.get('taskId') as string) || null;
+
+		// Run both writes in parallel — increment the day counter AND log the session
+		await Promise.all([
+			db.update(days).set({ pomodoroSessions: current + 1 }).where(eq(days.id, dayId)),
+			db.insert(pomodoroLogs).values({
+				userId: DEFAULT_USER_ID,
+				dayId,
+				taskId
+			})
+		]);
 	},
 
 	// ── Events ──────────────────────────────────────────────────────────────
@@ -254,6 +277,42 @@ export const actions: Actions = {
 			.update(inboxItems)
 			.set({ convertedToTaskId: newTask.id })
 			.where(eq(inboxItems.id, itemId));
+	},
+
+	// ── Recurring Events ─────────────────────────────────────────────────────
+	// Creates a new recurring event template. Instances will be auto-generated
+	// the next time a matching weekday is loaded.
+	addRecurringEvent: async ({ request }) => {
+		const data = await request.formData();
+		const title = (data.get('title') as string)?.trim();
+		const startsTime = data.get('startsTime') as string; // "HH:MM"
+		const endsTime = (data.get('endsTime') as string) || null;
+		const area = (data.get('area') as string) || null;
+		const remindOffsetMin = parseInt((data.get('remindOffsetMin') as string) ?? '5');
+		// recurrenceDays sent as multiple values: ['Mon', 'Wed', 'Fri']
+		const recurrenceDays = data.getAll('recurrenceDays') as string[];
+
+		if (!title) return fail(400, { error: 'Title is required' });
+		if (recurrenceDays.length === 0) return fail(400, { error: 'Select at least one day' });
+		if (!startsTime) return fail(400, { error: 'Start time is required' });
+
+		await db.insert(recurringEvents).values({
+			userId: DEFAULT_USER_ID,
+			title,
+			startsTime,
+			endsTime,
+			area,
+			remindOffsetMin,
+			recurrenceDays
+		});
+	},
+
+	// Soft-deactivates (sets active = false) a recurring event template.
+	// Existing instances already created are not deleted.
+	deleteRecurringEvent: async ({ request }) => {
+		const data = await request.formData();
+		const id = data.get('id') as string;
+		await db.update(recurringEvents).set({ active: false }).where(eq(recurringEvents.id, id));
 	},
 
 	// ── Carry Forward ────────────────────────────────────────────────────────

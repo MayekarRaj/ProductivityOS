@@ -18,12 +18,22 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 
+	interface Task {
+		id: string;
+		text: string;
+		area: string | null;
+	}
+
 	interface Props {
 		dayId: string;
 		sessions: number; // current pomodoro count for today (from DB)
+		tasks?: Task[];   // today's pending tasks for optional linking
 	}
 
-	let { dayId, sessions = $bindable() }: Props = $props();
+	let { dayId, sessions = $bindable(), tasks = [] }: Props = $props();
+
+	// Which task is currently linked to this session (null = no specific task)
+	let selectedTaskId = $state<string | null>(null);
 
 	// ── Constants ──────────────────────────────────────────────────────────────
 	const WORK_SECS = 25 * 60; // 1500
@@ -118,6 +128,8 @@
 	<input type="hidden" name="dayId" value={dayId} />
 	<!-- current is read at submit time, so we derive it from sessions - 1 because we already incremented locally -->
 	<input type="hidden" name="current" value={String(sessions - 1)} />
+	<!-- taskId is null-safe — empty string means no task linked -->
+	<input type="hidden" name="taskId" value={selectedTaskId ?? ''} />
 </form>
 
 <div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
@@ -142,6 +154,22 @@
 			{mode === 'work' ? '🍅 Work' : '☕ Break'}
 		</span>
 	</div>
+
+	<!-- Task selector — only shown in work mode, optional -->
+	{#if mode === 'work' && tasks.length > 0}
+		<div class="mb-3">
+			<select
+				bind:value={selectedTaskId}
+				class="w-full rounded border border-[#1e1e2e] bg-[#0c0c0f] px-2 py-1.5
+				       font-mono text-xs text-[#e2e2e8] outline-none focus:border-[#2a2a3e]"
+			>
+				<option value={null}>No task linked</option>
+				{#each tasks as task}
+					<option value={task.id}>{task.text}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 
 	<!-- SVG ring + time display -->
 	<div class="flex items-center justify-center py-2">

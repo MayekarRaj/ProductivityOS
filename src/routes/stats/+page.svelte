@@ -286,6 +286,46 @@
 			</ul>
 		{/if}
 	</div>
+	<!-- ── Focus by Area ────────────────────────────────────────────────────── -->
+	<!--
+		Shows which areas received linked pomodoro sessions this week.
+		Only rendered once the user has linked at least one session to a task.
+	-->
+	{#if stats.focusByArea.length > 0}
+		{@const maxSessions = Math.max(...stats.focusByArea.map((a) => a.sessions))}
+		<div class="rounded-xl border border-[#1e1e2e] bg-[#161620] p-5">
+			<p class="mb-1 font-mono text-xs font-semibold uppercase tracking-wider text-[#6b6b7a]">
+				Focus by Area
+			</p>
+			<p class="mb-4 font-mono text-[10px] text-[#3a3a4e]">
+				Pomodoro sessions linked to tasks this week
+			</p>
+			<ul class="space-y-3">
+				{#each stats.focusByArea as area}
+					{@const a = areaFor(area.key)}
+					{@const barPct = (area.sessions / maxSessions) * 100}
+					{@const focusHours = Math.round(area.sessions * 25 / 60 * 10) / 10}
+					<li class="space-y-1">
+						<div class="flex items-center justify-between">
+							<span class="font-mono text-xs {colorClasses(a?.color ?? 'purple').text}">
+								{area.emoji} {area.label}
+							</span>
+							<span class="font-mono text-xs text-[#6b6b7a]">
+								{area.sessions} session{area.sessions !== 1 ? 's' : ''} · {focusHours}h
+							</span>
+						</div>
+						<div class="relative h-2 w-full rounded-full bg-[#1e1e2e]">
+							<div
+								class="absolute left-0 top-0 h-full rounded-full {colorClasses(a?.color ?? 'purple').solid}"
+								style="width: {barPct}%"
+							></div>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
 	<!-- ── Sleep Patterns ───────────────────────────────────────────────────── -->
 	<!--
 		Bar chart: one bar per day showing hours slept.

@@ -144,6 +144,9 @@ export const events = pgTable('events', {
 	reminded: boolean('reminded').notNull().default(false), // flip to true after sending
 	area: text('area'),
 	source: text('source').notNull().default('web'), // 'web' | 'telegram' | 'ai'
+	// Set when this event was auto-created from a recurring template.
+	// Null for one-off events created manually.
+	recurringEventId: uuid('recurring_event_id').references(() => recurringEvents.id, { onDelete: 'set null' }),
 	createdAt: timestamptz('created_at').notNull().defaultNow()
 });
 
@@ -186,6 +189,49 @@ export const habitLogs = pgTable(
 	},
 	(table) => [unique('habit_logs_habit_date_unique').on(table.habitId, table.date)]
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECURRING EVENTS
+// Template definitions — NOT tied to a specific day.
+// When a day is first opened, load() checks which templates are due (by weekday)
+// and lazily creates instance rows in the events table if they don't exist yet.
+// ─────────────────────────────────────────────────────────────────────────────
+export const recurringEvents = pgTable('recurring_events', {
+	id: uuid('id').primaryKey().defaultRandom(),
+	userId: uuid('user_id')
+		.notNull()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	title: text('title').notNull(),
+	area: text('area'),
+	// HH:MM strings in IST — combined with the day's date to build a full timestamp
+	startsTime: text('starts_time').notNull(), // e.g. "09:30"
+	endsTime: text('ends_time'),               // e.g. "10:00" (optional)
+	remindOffsetMin: integer('remind_offset_min').notNull().default(5),
+	// Array of weekday abbreviations e.g. ['Mon','Tue','Wed','Thu','Fri']
+	recurrenceDays: text('recurrence_days').array().notNull(),
+	active: boolean('active').notNull().default(true),
+	createdAt: timestamptz('created_at').notNull().defaultNow()
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POMODORO LOGS
+// One row per completed work session. taskId is nullable — user can start a
+// session without linking it to a specific task.
+// The day-level count (days.pomodoroSessions) is kept as a fast summary;
+// this table provides the detail layer for area-level focus analytics.
+// ─────────────────────────────────────────────────────────────────────────────
+export const pomodoroLogs = pgTable('pomodoro_logs', {
+	id: uuid('id').primaryKey().defaultRandom(),
+	userId: uuid('user_id')
+		.notNull()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	dayId: uuid('day_id')
+		.notNull()
+		.references(() => days.id, { onDelete: 'cascade' }),
+	// Optional — null means "general focus, no specific task"
+	taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+	completedAt: timestamptz('completed_at').notNull().defaultNow()
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INBOX ITEMS
@@ -298,4 +344,14 @@ export const habitsRelations = relations(habits, ({ one, many }) => ({
 
 export const habitLogsRelations = relations(habitLogs, ({ one }) => ({
 	habit: one(habits, { fields: [habitLogs.habitId], references: [habits.id] })
+}));
+
+export const recurringEventsRelations = relations(recurringEvents, ({ one }) => ({
+	user: one(users, { fields: [recurringEvents.userId], references: [users.id] })
+}));
+
+export const pomodoroLogsRelations = relations(pomodoroLogs, ({ one }) => ({
+	user: one(users, { fields: [pomodoroLogs.userId], references: [users.id] }),
+	day: one(days, { fields: [pomodoroLogs.dayId], references: [days.id] }),
+	task: one(tasks, { fields: [pomodoroLogs.taskId], references: [tasks.id] })
 }));

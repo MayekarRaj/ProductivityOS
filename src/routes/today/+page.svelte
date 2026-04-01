@@ -36,6 +36,12 @@
 	let newEventArea = $state(untrack(() => data.day.homeBase));
 	let newEventRemindOffset = $state('5'); // minutes before start
 
+	// ── Recurring events UI state ─────────────────────────────────────────────
+	let showManageRecurring = $state(false);
+	let showAddRecurring = $state(false);
+	const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+	let newRecurringDays = $state<string[]>([]);
+
 	// ── Sleep state ───────────────────────────────────────────────────────────
 	// Pre-populated from DB if sleep was logged previously (converts UTC → IST HH:MM)
 	let bedTime = $state(data.day.sleepStart ? formatTimeIST(data.day.sleepStart) : '');
@@ -319,6 +325,10 @@
 						Active
 					</span>
 				{/if}
+				<!-- Recurring badge -->
+				{#if event.recurringEventId}
+					<span title="Recurring event" class="font-mono text-[10px] text-[#3a3a4e]">↻</span>
+				{/if}
 				<!-- Delete -->
 				<form method="POST" action="?/deleteEvent" use:enhance>
 					<input type="hidden" name="id" value={event.id} />
@@ -418,6 +428,148 @@
 					</button>
 				</div>
 			</form>
+		{/if}
+	</div>
+
+	<!-- ── Manage Recurring Events ──────────────────────────────────────────── -->
+	<!--
+		Collapsible section for creating and deleting recurring event templates.
+		Instances are auto-created by load() each day — this is just the config panel.
+	-->
+	<div class="space-y-1">
+		<button
+			onclick={() => (showManageRecurring = !showManageRecurring)}
+			class="flex items-center gap-1.5 font-mono text-[10px] text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
+		>
+			<span>↻</span>
+			<span>Manage recurring ({data.recurringTemplates.length})</span>
+			<svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+				<path
+					d={showManageRecurring ? 'M1 5L4 2L7 5' : 'M1 3L4 6L7 3'}
+					stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"
+				/>
+			</svg>
+		</button>
+
+		{#if showManageRecurring}
+			<div class="space-y-1.5 rounded-lg border border-[#1e1e2e] bg-[#0c0c0f] p-3">
+				<!-- Existing recurring templates -->
+				{#each data.recurringTemplates as tmpl}
+					{@const tmplArea = tmpl.area ? areaFor(tmpl.area, data.areas) : null}
+					{@const tmplColors = tmplArea ? colorClasses(tmplArea.color) : null}
+					<div class="flex items-center gap-2 rounded border border-[#1e1e2e] bg-[#161620] px-2.5 py-2">
+						<div class="flex-1 min-w-0">
+							<span class="font-mono text-xs text-[#e2e2e8]">{tmpl.title}</span>
+							<span class="ml-2 font-mono text-[10px] text-[#6b6b7a]">{tmpl.startsTime}</span>
+							{#if tmplArea && tmplColors}
+								<span class="ml-1 font-mono text-[9px] uppercase {tmplColors.text}">{tmplArea.label}</span>
+							{/if}
+							<p class="font-mono text-[9px] text-[#3a3a4e]">{tmpl.recurrenceDays.join(', ')}</p>
+						</div>
+						<form method="POST" action="?/deleteRecurringEvent" use:enhance>
+							<input type="hidden" name="id" value={tmpl.id} />
+							<button type="submit" class="font-mono text-[10px] text-[#3a3a4e] hover:text-red-400">✕</button>
+						</form>
+					</div>
+				{/each}
+
+				{#if data.recurringTemplates.length === 0 && !showAddRecurring}
+					<p class="font-mono text-[10px] text-[#3a3a4e]">No recurring events yet</p>
+				{/if}
+
+				<!-- Toggle add form -->
+				{#if !showAddRecurring}
+					<button
+						onclick={() => (showAddRecurring = true)}
+						class="flex items-center gap-1.5 font-mono text-[10px] text-[#3a3a4e] transition-colors hover:text-[#6b6b7a]"
+					>
+						<span class="text-sm leading-none">+</span> Add recurring event
+					</button>
+				{:else}
+					<!-- Add recurring event form -->
+					<form
+						method="POST"
+						action="?/addRecurringEvent"
+						use:enhance={() => {
+							return async ({ update }) => {
+								await update();
+								showAddRecurring = false;
+								newRecurringDays = [];
+							};
+						}}
+						class="space-y-2 border-t border-[#1e1e2e] pt-2"
+					>
+						<input
+							name="title"
+							required
+							placeholder="Event title..."
+							class="w-full bg-transparent font-mono text-xs text-[#e2e2e8] placeholder-[#3a3a4e] outline-none"
+						/>
+						<div class="flex items-center gap-2">
+							<input
+								type="time"
+								name="startsTime"
+								required
+								class="rounded border border-[#1e1e2e] bg-[#161620] px-2 py-1 font-mono text-xs
+								       text-[#e2e2e8] outline-none [color-scheme:dark]"
+							/>
+							<span class="font-mono text-[10px] text-[#3a3a4e]">→</span>
+							<input
+								type="time"
+								name="endsTime"
+								class="rounded border border-[#1e1e2e] bg-[#161620] px-2 py-1 font-mono text-xs
+								       text-[#e2e2e8] outline-none [color-scheme:dark]"
+							/>
+							<select
+								name="area"
+								class="rounded border border-[#1e1e2e] bg-[#161620] px-2 py-1 font-mono text-xs text-[#e2e2e8] outline-none"
+							>
+								<option value="">No area</option>
+								{#each data.areas.filter(a => !a.suspended) as area}
+									<option value={area.key}>{area.emoji} {area.label}</option>
+								{/each}
+							</select>
+						</div>
+						<!-- Day selector — checkboxes for each weekday -->
+						<div class="flex flex-wrap gap-1">
+							{#each WEEKDAYS as day}
+								<label class="flex cursor-pointer items-center gap-1">
+									<input
+										type="checkbox"
+										name="recurrenceDays"
+										value={day}
+										checked={newRecurringDays.includes(day)}
+										onchange={(e) => {
+											if (e.currentTarget.checked) {
+												newRecurringDays = [...newRecurringDays, day];
+											} else {
+												newRecurringDays = newRecurringDays.filter(d => d !== day);
+											}
+										}}
+										class="accent-violet-500"
+									/>
+									<span class="font-mono text-[10px] text-[#6b6b7a]">{day}</span>
+								</label>
+							{/each}
+						</div>
+						<div class="flex items-center gap-2">
+							<button
+								type="submit"
+								class="rounded bg-violet-500/20 px-3 py-1 font-mono text-xs text-violet-400 hover:bg-violet-500/30"
+							>
+								Save
+							</button>
+							<button
+								type="button"
+								onclick={() => { showAddRecurring = false; newRecurringDays = []; }}
+								class="font-mono text-xs text-[#3a3a4e] hover:text-[#6b6b7a]"
+							>
+								Cancel
+							</button>
+						</div>
+					</form>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
@@ -777,7 +929,7 @@
 
     <!-- ── Pomodoro Timer ────────────────────────────────────────────────────── -->
     <div id="pomodoro-panel">
-      <PomodoroTimer dayId={data.day.id} sessions={data.day.pomodoroSessions} />
+      <PomodoroTimer dayId={data.day.id} sessions={data.day.pomodoroSessions} tasks={pendingTasks} />
     </div>
 
     <!-- ── Daily Note ────────────────────────────────────────────────────────── -->

@@ -35,6 +35,13 @@ export type HabitConsistency = {
 	percent: number; // 0–100
 };
 
+export type FocusAreaStat = {
+	key: string;
+	label: string;
+	emoji: string;
+	sessions: number; // completed pomodoros linked to tasks in this area
+};
+
 export type SleepStat = {
 	date: string;
 	weekday: string;
@@ -53,6 +60,7 @@ export type WeekStats = {
 	habitConsistency: HabitConsistency[]; // sorted worst → best
 	sleepStats: SleepStat[]; // 7 entries, Mon–Sun (hours slept each night)
 	avgSleepHours: number | null; // average over logged days (null if none logged)
+	focusByArea: FocusAreaStat[]; // pomodoros per area (only areas with linked sessions)
 	// Weekly wins
 	wins: string[];
 };
@@ -75,10 +83,11 @@ export function computeWeekStats(
 		sleepStart: Date | null;
 		sleepEnd: Date | null;
 	}>,
-	taskRows: Array<{ dayId: string; area: string | null; done: boolean }>,
+	taskRows: Array<{ id: string; dayId: string; area: string | null; done: boolean }>,
 	habitRows: Array<{ id: string; name: string; area: string; frequency: string; customDays: string[] | null }>,
 	habitLogRows: Array<{ habitId: string; date: string; status: string }>,
-	areas: AreaRow[]
+	areas: AreaRow[],
+	pomodoroLogRows: Array<{ taskId: string | null }> = []
 ): WeekStats {
 	// ── Build lookup helpers ──────────────────────────────────────────────────
 	const dayByDate = new Map(dayRows.map((d) => [d.date, d]));
@@ -155,6 +164,29 @@ export function computeWeekStats(
 		};
 	}).sort((a, b) => a.percent - b.percent); // worst first
 
+	// ── Focus by area ─────────────────────────────────────────────────────────
+	// For each pomodoro log that has a linked task, look up the task's area and
+	// count sessions per area. Logs with no taskId are counted as "unlinked".
+	const taskById = new Map(taskRows.map((t) => [t.id, t]));
+
+	const sessionsByArea = new Map<string, number>();
+	for (const log of pomodoroLogRows) {
+		if (!log.taskId) continue; // skip unlinked sessions
+		const task = taskById.get(log.taskId);
+		const areaKey = task?.area ?? 'personal';
+		sessionsByArea.set(areaKey, (sessionsByArea.get(areaKey) ?? 0) + 1);
+	}
+
+	const focusByArea: FocusAreaStat[] = areas
+		.filter((a) => sessionsByArea.has(a.key))
+		.map((a) => ({
+			key: a.key,
+			label: a.label,
+			emoji: a.emoji,
+			sessions: sessionsByArea.get(a.key) ?? 0
+		}))
+		.sort((a, b) => b.sessions - a.sessions); // most focused first
+
 	// ── Sleep stats ───────────────────────────────────────────────────────────
 	// sleepStart/sleepEnd are timestamptz — duration = (sleepEnd - sleepStart) in hours.
 	// Each day row holds the sleep for that MORNING (e.g. Monday row = Sunday night → Monday wake).
@@ -207,7 +239,7 @@ export function computeWeekStats(
 		wins.push(`Averaged ${avgSleepHours}h sleep — well rested week`);
 	}
 
-	return { tasksDoneTotal, mvdDays, habitsCompleted, pomodorosTotal, dayStats, areaStats, habitConsistency, sleepStats, avgSleepHours, wins };
+	return { tasksDoneTotal, mvdDays, habitsCompleted, pomodorosTotal, dayStats, areaStats, habitConsistency, sleepStats, avgSleepHours, focusByArea, wins };
 }
 
 // Helper: longest run of `true` values in an array
