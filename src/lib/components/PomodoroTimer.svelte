@@ -36,7 +36,7 @@
 	let selectedTaskId = $state<string | null>(null);
 
 	// ── Constants ──────────────────────────────────────────────────────────────
-	const WORK_SECS = 25 * 60; // 1500
+	const WORK_SECS = 25 * 60; // 1500000000000
 	const BREAK_SECS = 5 * 60; // 300
 	const RADIUS = 45;
 	const CIRC = 2 * Math.PI * RADIUS; // ~282.7
